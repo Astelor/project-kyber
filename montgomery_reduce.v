@@ -1,39 +1,32 @@
-module montgomery_reduce(
-  input clk,
-  input reset,
-  input set,
-  input wire signed [31:0] a,
-  output reg signed [15:0] t
+module montgomery_reduce ( // combinational, purely driven by input, let's see what happens :P
+  //input clk, // AST: if it's purely combinational, do I even need a clock here?
+  //input reset,
+  //input set,
+  input  wire signed [31:0] a,
+  output reg  signed [15:0] t
 );
 
 reg signed [31:0] temp32;
 reg signed [15:0] temp16;
 
-always @(posedge clk) begin
-  if(set) begin
-    #1 // AST: the timing should be placed else where
+always @(*) begin // AST: there must be some other way to drive the submodules >:(
     temp32 = a;
     temp16 = (temp32 * -3327) &16'hFFFF;
     temp32 = temp16 * 13'sd3329;
     t = (a - temp32) >> 16;
     //$display("[%0t] input:%0d, output: %0d", $time, a, t);
-    // I guess I can write it here? if I just need to test the corectness
-    //temp[15:0] = a - ( * 3329);
-    
-    //temp = (a - temp); //surely it works :)
-    //t = (a - temp)>>16;
-  end
-  
-  /*
-  t <= temp;
-  temp <= temp+1;
-  */
 end
+
+/*
+always @(posedge reset) begin // AST: I don't think resetting it is necessary
+  t = 16'hzzzz; // AST: do I reset it to z or x ?
+end
+// worst case we just drive a high impedance to clear everything if needed?
+*/
 
 endmodule
 
 /*
-
 *************************************************
 * Name:        montgomery_reduce
 *

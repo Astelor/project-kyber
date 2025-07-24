@@ -8,9 +8,6 @@ reg signed [31:0] data_in;
 wire signed [15:0] data_out;
 
 montgomery_reduce p1(
-  .clk(clk),
-  .reset(reset),
-  .set(set),
   .a(data_in),
   .t(data_out)
 );
@@ -28,9 +25,12 @@ parameter inputtime = 10;
 
 initial begin
   $display("[%0t] starting simulation...", $time);
-  clk = 0;
-  set = 1;
-  file_desc = $fopen("D:/!Github_coding/project-kyber/test/small-mont.txt", "r");
+  clk <= 0;
+  set <= 0;
+  reset <= 0;
+  #1 reset <= 1;
+  #1 reset <= 0;
+  file_desc <= $fopen("D:/!Github_coding/project-kyber/test/test-mont.txt", "r");
   $display("[%0t] file opened", $time);
   /*
   #4 // for input timing
@@ -54,12 +54,13 @@ always @(posedge clk) begin
       $display("[%0t] job done", $time);
       $stop;
     end
-    file_stat = $fscanf(file_desc, "%d %d\n", data_in, data_ref);
+    file_stat <= $fscanf(file_desc, "%d %d\n", data_in, data_ref);
+    //set <= 1; #1 set <= 0;
   end
 end
 
 always @(posedge clk) begin
-  #2 // timing
+  #1 // timing
   if(data_out != data_ref) begin
     $display("[%0t] a: %0d, t: %0d, ref: %0d", $time, data_in, data_out, data_ref);
   end
