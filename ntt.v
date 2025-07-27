@@ -1,43 +1,83 @@
 module ntt ( // now this thing must have a clock
   input clk,
   input reset,
-  input set
+  input set,
+  output reg done
   // uh input?
 );
-`define ITEMS 16
-reg signed [15:0] zetas [127:0];
-reg signed [15:0] poly [`ITEMS:0]; // [255:0]
+`define ITEMS 256
+//reg signed [15:0] zetas [127:0];
+//reg signed [15:0] poly [`ITEMS:0]; // [255:0]
 // TODO: make actual RAM
 initial begin
-  $readmemh("D:/!Github_coding/project-kyber/zeta.hex", zetas); // read the zetas in
-  $readmemh("D:/!Github_coding/project-kyber/poly_test.hex", poly);
+  //$readmemh("D:/!Github_coding/project-kyber/zeta.hex", zetas); // read the zetas in
+  //$readmemh("D:/!Github_coding/project-kyber/poly_test.hex", poly);
 end
 
-reg set0, set1, set2, set3;
 reg  signed [15:0] f_len, f, ff, b; 
 wire signed [15:0] tt, rr1, rr2;
+wire signed [15:0] zeta_wire;
+
+/*poly ram control*/
+reg r1_en, w1_en;
+reg r2_en, w2_en;
+reg [15:0] r1_addr, r2_addr;
+reg [15:0] w1_addr, w2_addr;
+reg [15:0] w1_d, w2_d;
+wire [15:0] r1_d, r2_d;
+
+/*index control*/
+parameter N = `ITEMS; // when N = 8, there's data hazard
+reg [15:0] len = N/2, k = 1, i = 0, start = 0; // put it in initial construct
+reg [15:0] lenn1 = 'dz, lenn2 = 'dz, lenn3 = 'dz, lenn4 = 'dz;
+
+/* propagation*/
+reg set0, set1, set2, set3, set4;
+reg [15:0] ii1 = 'dz ,ii2 = 'dz, ii3 = 'dz, ii4 = 'dz;
+reg [15:0] kk;
 
 fqmul fq1(
   .clk(clk),
   //.set(set1),
-  .a(f_len), // f[j+len]
-  .b(b),
+  .a(r1_d), // f[j+len] -> read from poly_ram
+  .b(zeta_wire), // zeta -> read from zeta_rom
   .t(tt)
 );
 
 ct_butfly ct1(
   .clk(clk),
   .set(set1),
-  .f(ff), // f[j]
+  .f(f), // f[j]
   .t(tt),
   .r1(rr1),
   .r2(rr2)
 );
 
+poly_ram #(`ITEMS) ram1(
+  .clk(clk),
+  //.reset(reset),
+  .r1_en(r1_en),
+  .r2_en(r2_en),
+  .w1_en(w1_en),
+  .w2_en(w2_en),
+  .r1_addr(r1_addr),
+  .r2_addr(r2_addr),
+  .w1_addr(w1_addr),
+  .w2_addr(w2_addr),
+  .d1_in(/*w1_d*/rr1),
+  .d2_in(/*w2_d*/rr2),
+  .d1_out(r1_d),
+  .d2_out(r2_d)
+);
+
+zeta_rom rom1(
+  .clk(clk),
+  .set(set0), //?
+  .addr(kk),
+  .data_out(zeta_wire)
+);
+
 /*index control*****************************************/
-parameter N = `ITEMS; // when N = 8, there's data hazard
-reg [15:0] len = N/2, k = 1, i = 0, start = 0; // put it in initial construct
-reg [15:0] lenn1 = 'dz, lenn2 = 'dz, lenn3 = 'dz;
 always @(posedge clk) begin // TODO: idk why but the logic feels weird
   if(len - 1 && set0) begin
     if(i < start + len - 1) begin // I think this is the problem where the index is off by one
@@ -61,10 +101,19 @@ end
 /*data reading tasks************************************/
 always @(posedge clk) begin // it takes 3 clocks to finish the computation
   // need set (enable) signal here to stop it from doing cal
-  if(len -1 && set0) begin
+  if(/*lenn2 - 1 &&*/ set0) begin
+    //lenn2 has the correct timing on when to end the sim
+    /*
     f_len <= poly[i+len];
     f <= poly[i];
     b <= zetas[k];
+    */
+    // maybe I should just funnel it into the line?
+    /*
+    */
+    r1_addr <= i + len;
+    r2_addr <= i;
+    f <= r2_d; // this is definitely a hazard, I'm calling it
   end
 end
 
@@ -72,45 +121,71 @@ end
 always @(posedge clk) begin
   if(set) begin
     set0 <= 1;
+    r1_en <= 1;
+    r2_en <= 1;
   end
+  if(lenn1 == 1) begin
+    set0 <= 0;
+  end
+end
+
+/*test done output*/
+
+always @(negedge set3) begin
+  done <= 1;
 end
 
 /*propagation tasks*************************************/
 // TODO: should probably make it into a buffer, since only the last stage (ii3, lenn3, set3)is used
-reg [15:0] ii1 = 'dz ,ii2 = 'dz, ii3 = 'dz;
 always @(posedge clk) begin
   ff <= f;
+  kk <= k;
 end
 
 always @(posedge clk) begin
   ii1 <= i;
   ii2 <= ii1;
   ii3 <= ii2;
+  ii4 <= ii3;
 end
 
 always @(posedge clk) begin
   set1 <= set0;
   set2 <= set1;
   set3 <= set2;
+  set4 <= set3;
+  // RAM control
+  w1_en <= set3;
+  w2_en <= set3;
 end
 
 always @(posedge clk) begin
   lenn1 <= len;
   lenn2 <= lenn1;
   lenn3 <= lenn2;
+  lenn4 <= lenn3;
 end
 
 /*RAM write back******************************************/
-reg signed [15:0] rt1, rt2; 
+reg signed [15:0] rt1, rt2; // this is test output btw
 always @(posedge clk) begin // I guess I need to design a state machine
-  if(lenn3 - 1 && set3) begin // line the thing up, or use a regsiter so it can write back to mmeory in time or smth
+  if(lenn3 - 1 && set3) begin // line the thing up, or use a regsiter so it can write back to mmeory in time or smth    
+    /*
     poly[ii3+lenn3] <= rr1; // the 3 one is correct, now it causes hazard and becomes annoying
     poly[ii3] <= rr2;
     rt1 <= rr1;
     rt2 <= rr2;
+    */
+    // right... I need it to be dual port on the RAM
+    /*
+    */
+    w1_addr <= ii3 + lenn3;
+    w2_addr <= ii3;
+    //w1_d <= rr1;
+    //w2_d <= rr2;
+    // okay the stop signal needs to be handled somewhat differently
   end
 end
-
 endmodule
 
 /*test for 8 `items only**********************************/

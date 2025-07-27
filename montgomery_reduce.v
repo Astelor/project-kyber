@@ -1,6 +1,6 @@
 module montgomery_reduce ( // combinational, purely driven by input, let's see what happens :P
   //input clk, // AST: if it's purely combinational, do I even need a clock here?
-  //input reset,
+  //input reset, // YES because of the realistic timing constraints :NotLikeThis:
   //input set,
   input  wire signed [31:0] a,
   output reg  signed [15:0] t
