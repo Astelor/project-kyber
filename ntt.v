@@ -1,6 +1,6 @@
 module ntt ( // now this thing must have a clock
   input clk,
-  input reset,
+  input reset, // <- definitely needed
   input set,
   output reg done
   // uh input?
@@ -28,7 +28,7 @@ wire [15:0] r1_d, r2_d;
 
 /*index control*/
 parameter N = `ITEMS; // when N = 8, there's data hazard
-reg [15:0] len = N/2, k = 1, i = 0, start = 0; // put it in initial construct
+reg [15:0] len = N/2, k = 1, i = 0, start = 0; // put it in reset
 reg [15:0] lenn1 = 'dz, lenn2 = 'dz, lenn3 = 'dz, lenn4 = 'dz;
 
 /* propagation*/
@@ -38,7 +38,7 @@ reg [15:0] kk;
 
 fqmul fq1(
   .clk(clk),
-  //.set(set1),
+  .set(set1),
   .a(r1_d), // f[j+len] -> read from poly_ram
   .b(zeta_wire), // zeta -> read from zeta_rom
   .t(tt)
@@ -47,7 +47,7 @@ fqmul fq1(
 ct_butfly ct1(
   .clk(clk),
   .set(set1),
-  .f(f), // f[j]
+  .f(ff), // f[j]
   .t(tt),
   .r1(rr1),
   .r2(rr2)
@@ -78,9 +78,10 @@ zeta_rom rom1(
 );
 
 /*index control*****************************************/
+// okay it works, maybe I should hardcode this?
 always @(posedge clk) begin // TODO: idk why but the logic feels weird
   if(len - 1 && set0) begin
-    if(i < start + len - 1) begin // I think this is the problem where the index is off by one
+    if(i < start + len - 1) begin 
       i <= i + 1;
     end
     else begin
@@ -100,7 +101,6 @@ end
 
 /*data reading tasks************************************/
 always @(posedge clk) begin // it takes 3 clocks to finish the computation
-  // need set (enable) signal here to stop it from doing cal
   if(/*lenn2 - 1 &&*/ set0) begin
     //lenn2 has the correct timing on when to end the sim
     /*
@@ -124,7 +124,7 @@ always @(posedge clk) begin
     r1_en <= 1;
     r2_en <= 1;
   end
-  if(lenn1 == 1) begin
+  if(lenn2 == 1) begin
     set0 <= 0;
   end
 end
@@ -169,7 +169,7 @@ end
 /*RAM write back******************************************/
 reg signed [15:0] rt1, rt2; // this is test output btw
 always @(posedge clk) begin // I guess I need to design a state machine
-  if(lenn3 - 1 && set3) begin // line the thing up, or use a regsiter so it can write back to mmeory in time or smth    
+  if(lenn4 - 1 && set4) begin // line the thing up, or use a regsiter so it can write back to mmeory in time or smth    
     /*
     poly[ii3+lenn3] <= rr1; // the 3 one is correct, now it causes hazard and becomes annoying
     poly[ii3] <= rr2;
@@ -179,8 +179,8 @@ always @(posedge clk) begin // I guess I need to design a state machine
     // right... I need it to be dual port on the RAM
     /*
     */
-    w1_addr <= ii3 + lenn3;
-    w2_addr <= ii3;
+    w1_addr <= ii4 + lenn4;
+    w2_addr <= ii4;
     //w1_d <= rr1;
     //w2_d <= rr2;
     // okay the stop signal needs to be handled somewhat differently
