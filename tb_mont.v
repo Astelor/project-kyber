@@ -8,6 +8,8 @@ reg signed [31:0] data_in;
 wire signed [15:0] data_out;
 
 montgomery_reduce p1(
+  .clk(clk),
+  .set(set),
   .a(data_in),
   .t(data_out)
 );
@@ -30,6 +32,7 @@ initial begin
   reset <= 0;
   #1 reset <= 1;
   #1 reset <= 0;
+  set <= 1;
   file_desc <= $fopen("D:/!Github_coding/project-kyber/test/test-mont.txt", "r");
   $display("[%0t] file opened", $time);
   /*

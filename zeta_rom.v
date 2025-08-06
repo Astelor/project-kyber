@@ -1,8 +1,6 @@
 module zeta_rom (
   input clk,
-  input reset,
-  input set,
-  input wire [15:0] addr,
+  input wire [6:0] addr,
   output reg signed [15:0] data_out
 );
 
@@ -13,9 +11,7 @@ initial begin
 end
 
 always @(posedge clk) begin
-  if(set) begin
-    data_out <= zetas[addr];
-  end
+  data_out <= zetas[addr];
 end
 
 endmodule

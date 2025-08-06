@@ -1,7 +1,7 @@
 module montgomery_reduce ( // combinational, purely driven by input, let's see what happens :P
-  //input clk, // AST: if it's purely combinational, do I even need a clock here?
+  input clk, // AST: if it's purely combinational, do I even need a clock here?
   //input reset, // YES because of the realistic timing constraints :NotLikeThis:
-  //input set,
+  input set,
   input  wire signed [31:0] a,
   output reg  signed [15:0] t
 );
@@ -9,12 +9,14 @@ module montgomery_reduce ( // combinational, purely driven by input, let's see w
 reg signed [31:0] temp32;
 reg signed [15:0] temp16;
 
-always @(*) begin // AST: there must be some other way to drive the submodules >:(
+always @(posedge clk) begin // AST: there must be some other way to drive the submodules >:(
+  if(set) begin
     temp32 = a;
     temp16 = (temp32 * -3327) &16'hFFFF;
     temp32 = temp16 * 13'sd3329;
     t = (a - temp32) >> 16;
-    //$display("[%0t] input:%0d, output: %0d", $time, a, t);
+  end
+  //$display("[%0t] input:%0d, output: %0d", $time, a, t);
 end
 
 /*
