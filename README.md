@@ -19,7 +19,8 @@ The `.v` files are Verilog design files written by me, the rest are auto generat
  ┣ 📜.gitignore
  ┣ 📜kyber.v
  ┣ 📜montgomery_reduce.v
- ┣ 📜README.md
+ ┣ 📜fqmul.v
  ┣ 📜tb_mont.v
- ┗ 📜TODO.md
+ ┣ 📜tb_fqmul.v
+ ┗ 📜README.md
 ```
