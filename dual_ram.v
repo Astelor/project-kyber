@@ -1,21 +1,20 @@
 // true dual port RAM
-module dual_ram #(parameter DEPTH = 8)(
+module dual_ram #(parameter DEPTH = 8, WIDTH = 16)(
   input clk,
   input wire we_1, // write enable
   input wire we_2,
   input wire [DEPTH-1:0] addr_1,
   input wire [DEPTH-1:0] addr_2,
-  input wire [15:0] din_1, 
-  input wire [15:0] din_2,
-  output reg [15:0] dout_1,
-  output reg [15:0] dout_2
+  input wire [WIDTH-1:0] din_1, 
+  input wire [WIDTH-1:0] din_2,
+  output reg [WIDTH-1:0] dout_1,
+  output reg [WIDTH-1:0] dout_2
 );
 //parameter DEPTH = 8; // 2^8 = 256 depth = 8
-reg [15:0] mem [ (1<<DEPTH)-1 :0];
+reg [WIDTH-1:0] mem [ (1<<DEPTH)-1 :0];
 
-initial begin
-  $readmemh("D:/!Github_coding/project-kyber/poly_test.hex", mem);
-  //$readmemh("D:/!Github_coding/project-kyber/zeta.hex", zetas);
+initial begin // TODO this should be gone once the RAM input and output finish construction
+  //$readmemh("D:/!Github_coding/project-kyber/poly_test.hex", mem);
 end
 
 // PORT 1

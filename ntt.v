@@ -1,18 +1,20 @@
-module ntt(
+module ntt #(parameter DEPTH = 4)(
   input clk,
   input set,
   input reset,
-  //input wire [15:0] ntt_din_1,
-  //input wire [15:0] ntt_din_2,
-  //input readin, // reading in the data to RAM1
+  input wire [15:0] ntt_din_1,
+  input wire [15:0] ntt_din_2,
+  input wire [DEPTH-1:0] in_index,
+  input readin, // reading in the data to RAM1
   input readout, // reading out the data from RAM2
+  input cal_en,
   output reg done,
-  output reg [15:0] ntt_dout_1,
-  output reg [15:0] ntt_dout_2,
-  output reg out
+  output reg [15:0] ntt_dout_1, // i+1
+  output reg [15:0] ntt_dout_2, // i+0
+  output reg [DEPTH-1:0] out_index
   // need signal for outputting data to RAM
 );
-parameter DEPTH = 4; // 2^8 = 256 depth = 8
+//parameter DEPTH = 4; // 2^8 = 256 depth = 8
 
 reg ram1_we;
 reg ram2_we;
@@ -29,7 +31,7 @@ wire signed [15:0] r1, r2;
 wire signed [15:0] zeta;
 reg [6:0] zeta_k_1, zeta_k_2;
 
-dual_ram #(DEPTH) ram1(
+dual_ram #(DEPTH, 16) ram1(
   .clk(clk),
   .we_1(ram1_we),
   .we_2(ram1_we),
@@ -41,7 +43,7 @@ dual_ram #(DEPTH) ram1(
   .dout_2(ram1_dout_2)
 );
 
-dual_ram #(DEPTH) ram2(
+dual_ram #(DEPTH, 16) ram2(
   .clk(clk),
   .we_1(ram2_we),
   .we_2(ram2_we),
@@ -84,10 +86,11 @@ wire [DEPTH-1:0] wr_addr2 = wr_index;
 
 reg [7:0] timer;
 reg wr_ctrl;
-reg stall;
-reg [2:0] layer;
+reg rd_ctrl;
+reg [1:0] layer; // TODO: [2:0] for DEPTH = 8, [1:0] for DEPTH = 4
 
 reg readout_ctrl;
+reg stale; // flag to indicate that the data has been processed
 
 always @(posedge clk or posedge reset) begin
   // reset the index
@@ -101,16 +104,19 @@ always @(posedge clk or posedge reset) begin
     
     timer <= 0;
     wr_ctrl <= 0;
-    stall <= 0;
+    rd_ctrl <= 0;
     layer <= 1;
-
+    stale <= 1;
+    
+    done <= 1; // reset done to 1 for input flag perposes
+    readout_ctrl <= 0;
+  end else if(set && done && cal_en && stale && !readin && !readout) begin
+    stale <= 0;
     done <= 0;
-    out <= 0;
+    index <= 0;
+    readout_ctrl <= 0;
   // NTT is not done, start doing NTT
-  end else if(set && done == 0) begin
-    if(layer >= DEPTH) begin
-      done <= 1;
-    end 
+  end else if(set && !done && !readin && !stale) begin
     if(wr_ctrl == 0) begin // TODO: I'm not sure about putting this under else if 
       timer <= timer + 1;
     end 
@@ -119,25 +125,31 @@ always @(posedge clk or posedge reset) begin
       timer <= 0;
     end
     // read index
-    if(len > 1 && stall == 0) begin
+    if(len > 1 && rd_ctrl == 0) begin
       if((len & (index + 1)) == len) begin
         index <= index + 1 + len;
         k <= k + 1; // TODO: handling to one time zeta rom read
         if((index + len + 1) == 1 << DEPTH) begin
           len <= len >> 1;
-          stall <= 1;
+          // flags
+          rd_ctrl <= 1;
         end
       end else begin
         index <= index + 1;
       end
     end
     // write index
+    if(layer == 0) begin
+      done <= 1;
+      stale <= 1; // the data has been processed
+    end
     if(wr_len > 1 && wr_ctrl) begin
       if((wr_len & (wr_index + 1)) == wr_len) begin
         wr_index <= wr_index + 1 + wr_len;
         if((wr_index + wr_len + 1) == 1 << DEPTH) begin
           wr_len <= wr_len >> 1;
-          stall <= 0;
+          // flags
+          rd_ctrl <= 0;
           wr_ctrl <= 0;
           layer <= layer + 1;
         end
@@ -146,14 +158,13 @@ always @(posedge clk or posedge reset) begin
       end
     end
   // NTT done, readout = 1
-  // TODO: does it need a reset reading position signal?
-  end else if(set && done == 1 && readout == 1) begin
+  end else if(set && done && readout) begin
     index <= index + 2;
-    if(out == 0) begin
+    if(!readout_ctrl) begin // delay for RAM readout for correct timing 
       timer <= timer + 1;
     end
-    if(timer >= 3) begin
-      out <= 1;
+    if(timer >= 1) begin
+      readout_ctrl <= 1;
     end
   end else begin
     // no op :>
@@ -168,7 +179,21 @@ end
 // RAM
 always @(posedge clk) begin
   if(set) begin
-    if(done == 0) begin
+    // input poly to RAM1 for NTT operation
+    // allow iff no cal is present, and the data is stale
+    if(done && readin && stale) begin
+      ram1_we <= 1; 
+      //index <= in_index;
+      if(in_index & 'b1 == 0) begin
+        // ensure the index is not an odd number
+        ram1_addr_1 <= in_index + 1;
+        ram1_addr_2 <= in_index;
+        ram1_din_1 <= ntt_din_1;
+        ram1_din_2 <= ntt_din_2;
+      end
+    end 
+    // doing the NTT
+    if(!done && !readin && !readout) begin
       // RAM1 read
       if((layer & 'b1) == 1) begin
         ram1_we <= 0;
@@ -203,13 +228,25 @@ always @(posedge clk) begin
         ram2_din_1 <= r1;
         ram2_din_2 <= r2;
       end
-    end else if (done == 1 && readout == 1) begin
-      ram2_addr_1 <= index;
-      ram2_addr_2 <= index + 1;
-      if(timer >= 3) begin
+    end
+    // NTT done, output RAM2 result
+    if (done && readout) begin
+      ram2_we <= 0;
+      ram2_addr_1 <= addr1; // len == 1
+      ram2_addr_2 <= addr2;
+      if(readout_ctrl) begin
+        out_index <= addr2 - 4; // some index is better than no index I guess?
         ntt_dout_1 <= ram2_dout_1;
         ntt_dout_2 <= ram2_dout_2;
       end
+    end else begin
+      // no op
+      // done == 1 and readout == 0
+      // done == 1 and readin == 1
+      // do I force a reset before reading in anything?
+      // do I permit reading in while reading out? -> this can do
+      // use write index for the reading in
+      // use read index for the reading out
     end
   end
 end
