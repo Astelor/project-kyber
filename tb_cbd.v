@@ -32,6 +32,7 @@ integer file_stat;
 initial begin
   #10 reset <= 1;
   #5  reset <= 0;
+  readin <= 1;
   file_desc <= $fopen("D:/!Github_coding/project-kyber/test/test-cbd2-dual.txt", "r");
   set <= 1;
 end

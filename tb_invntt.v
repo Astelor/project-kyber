@@ -1,5 +1,5 @@
 module tb_invntt;
-parameter DEPTH = 4;
+parameter DEPTH = 8;
 reg clk = 0;
 reg set = 0;
 reg reset = 0;
@@ -43,7 +43,10 @@ always begin
 end
 
 initial begin
-  $readmemh("D:/!Github_coding/project-kyber/poly_test.hex", mem);
+  // randomized input data
+  $readmemh("D:/!Github_coding/project-kyber/test/test-invntt-in.hex", mem);
+  // not randomized input data
+  //$readmemh("D:/!Github_coding/project-kyber/poly_test.hex", mem);
   #10 reset <= 1;
   #5  reset <= 0;
       set <= 1;
@@ -76,6 +79,9 @@ always @(posedge clk) begin
   end
   else begin
     full_in <= 0;
+  end
+  if(done) begin
+    $stop;
   end
 end
 

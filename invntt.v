@@ -12,13 +12,13 @@ module invntt #(parameter DEPTH = 8)(
   input cal_en,
   input full_in, // I guess? manage index ref externally
   // INPUT TO RAM
-  input wire [15:0] invntt_din_1,
-  input wire [15:0] invntt_din_2,
+  input wire signed [15:0] invntt_din_1,
+  input wire signed [15:0] invntt_din_2,
   input wire [DEPTH-1:0] in_index,
 
   // OUTPUT TO OUTSIDE
-  output reg [15:0] invntt_dout_1,
-  output reg [15:0] invntt_dout_2,
+  output reg signed [15:0] invntt_dout_1,
+  output reg signed [15:0] invntt_dout_2,
   output reg [DEPTH-1:0] out_index,
   // misc
   output wire readin_ok,
@@ -39,6 +39,8 @@ wire signed [15:0] r1, r2;
 
 wire signed [15:0] zeta; // zeta data
 reg [6:0] zeta_k_1, zeta_k_2; // zeta index
+
+wire [15:0] special_zeta = (zeta_k_2 == 1) ? 1441 : -1044;
 
 wire wr_ctrl, rd_ctrl;
 wire layer;
@@ -95,13 +97,14 @@ invntt_cal cal1(
   .set(set),
   .f1(f1),
   .f2(f2),
-  .zeta(zeta),
+  .zeta1(zeta),
+  .zeta2(special_zeta),
   .r1(r1),
   .r2(r2)
 );
 
 // TODO: you only need one
-zeta_rom rom1(
+zeta_rom #(1) rom1(
   .clk(clk),
   .addr(zeta_k_2),
   .data_out(zeta)

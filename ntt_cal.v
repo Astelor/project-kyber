@@ -1,8 +1,8 @@
 module ntt_cal(
   input clk,
   input set,
-  input wire signed [15:0] f1,
-  input wire signed [15:0] f2,
+  input wire signed [15:0] f1, // f[j+len]
+  input wire signed [15:0] f2, // f[j]
   input wire signed [15:0] zeta,
   output wire signed [15:0] r1,
   output wire signed [15:0] r2

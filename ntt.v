@@ -1,17 +1,20 @@
-module ntt #(parameter DEPTH = 4)(
+module ntt #(parameter DEPTH = 8)(
   input clk,
   input set,
   input reset,
-  input wire [15:0] ntt_din_1,
-  input wire [15:0] ntt_din_2,
-  input wire [DEPTH-1:0] in_index,
   input readin, // reading in the data to RAM1
   input readout, // reading out the data from RAM2
   input cal_en,
-  output reg done,
+  
+  input wire [15:0] ntt_din_1,
+  input wire [15:0] ntt_din_2,
+  input wire [DEPTH-1:0] in_index,
+  
   output reg [15:0] ntt_dout_1, // i+1
   output reg [15:0] ntt_dout_2, // i+0
-  output reg [DEPTH-1:0] out_index
+  output reg [DEPTH-1:0] out_index,
+  
+  output reg done
   // need signal for outputting data to RAM
 );
 //parameter DEPTH = 4; // 2^8 = 256 depth = 8
@@ -29,7 +32,7 @@ reg signed [15:0] f1, f2;
 wire signed [15:0] r1, r2;
 
 wire signed [15:0] zeta;
-reg [6:0] zeta_k_1, zeta_k_2;
+reg [6:0] zeta_k_1, zeta_k_2; // data propagation
 
 dual_ram #(DEPTH, 16) ram1(
   .clk(clk),

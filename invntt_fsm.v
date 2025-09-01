@@ -32,7 +32,7 @@ parameter TIM_STATE_S4 = 1;
 parameter STATE_S0     = 10'b00_0000_0001;
 parameter STATE_S1     = 10'b00_0000_0010;
 parameter STATE_S2     = 10'b00_0000_0100;
-parameter STATE_S3     = 10'b00_0000_1000;
+//parameter STATE_S3     = 10'b00_0000_1000;
 parameter STATE_S4     = 10'b00_0001_0000;
 parameter COMPUTE_S0   = 10'b00_0010_0000;
 parameter COMPUTE_S0_1 = 10'b00_0100_0000;
@@ -44,7 +44,7 @@ reg [9:0] curr_state;
 reg [9:0] next_state;
 
 reg [7:0] timer; // reuse timer because why not :>
-reg [2:0] layer; 
+reg [3:0] layer; 
 
 // current state
 always @(posedge clk or posedge reset) begin

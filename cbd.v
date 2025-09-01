@@ -2,12 +2,15 @@ module cbd( //
   input clk,
   input set,
   input reset,
-  input wire [31:0] cbd_din_1,
-  input wire [31:0] cbd_din_2,
   input wire readin,
   input wire readout,
+
+  input wire [31:0] cbd_din_1,
+  input wire [31:0] cbd_din_2,
+  
   output reg signed [15:0] cbd_dout_1, // read data out in poly form
   output reg signed [15:0] cbd_dout_2,
+  
   output reg ok_in,
   output reg ok_out
 );
@@ -71,8 +74,10 @@ always @(posedge clk or posedge reset) begin
       din_1  <= cbd_din_1;
       din_2  <= cbd_din_2;
     end else begin
+      /*
       addr_1 <= 'dz; addr_2 <= 'dz;
       din_1  <= 'dz; din_2  <= 'dz;
+      */
       we_1   <=   0; we_2   <=   0;
       
       ok_in   <= 0; // no more data going in
@@ -98,11 +103,13 @@ always @(posedge clk or posedge reset) begin
         din_2  <= cal_dout;
       end
     end else begin
+      /*
       addr_1 <= 'dz; addr_2 <= 'dz;
       din_1  <= 'dz; din_2  <= 'dz;
-      we_1   <=   0;  we_2  <=   0;
+      */
+      /*we_1   <=   0;*/  we_2  <=   0;
       
-      cal_din   <= 'dz;
+      //cal_din   <= 'dz;
       ok_out    <=   1;
       counter   <=   0;
       timer     <=   0; // timer was used, make sense to reset it right?
@@ -131,14 +138,16 @@ always @(posedge clk or posedge reset) begin
       end
     end else begin
       if(timer == 2) begin
+        /*
         addr_1 <= 'dz; addr_2 <= 'dz;
         din_1  <= 'dz; din_2  <= 'dz;
+        */
         ok_in  <=   1; ok_out <=   0;
         
         ready   <= 0; // the data is now stale
         counter <= 0;
         timer   <= 0; // timer reset
-        grain   <= 0; // it resets itself here
+        //grain   <= 0; // it resets itself here
         ctrl    <= 0;
       end
     end
