@@ -24,3 +24,65 @@ The `.v` files are Verilog design files written by me, the rest are auto generat
  ┣ 📜tb_fqmul.v
  ┗ 📜README.md
 ```
+
+# NTT
+
+> **Number theoretic transform**, by turning polynomials into the NTT domain using this transform, the product of two polynomials in NTT domain can be calculated element by element, thus lowering the computation complexity.
+
+## Design rationale
+
+- **dual dual-port RAM**
+  - FPGA has specific hardware and can only do two reads or two writes with two unique addresses
+  - NTT layers require two reads and two writes at the same time
+    - if there's only one RAM, the entire pipeline must be paused to accommodate the reads and writes (pausing read while writing or pausing write while reading)
+    - if there's two RAM, one can focus on reading while the other focus on writing. once a layer is completed, flip the direction and read from the RAM that was written and vice versa.
+- **read and write latency**
+  - to account for this, there are two flags to control the behavior of read/write index change and memory write. `stall` and `wr_ctrl`
+- **layer control**
+  - the NTT layer register is controlled by the write index logic nest
+  - as the layer switch to the next one, it resumes read index, memory read, and starts the timer for write index
+
+## potential improvements 
+
+- (written at 2025-08-15)
+  - separation of FSM and calculation logic
+    - while the indexing logic is good enough, the entire state machine is still quite "spaghetti."
+    - it works in simulation and in RTL it synthesized less logic elements than I expected (750), I think much can still improve
+  - read and write accountability
+    - there should be a 1 bit tag array for every slot in RAM the external module write or read 
+  - somethings can be hardcoded (e.g. the index for each layer) but it's a logic to memory trade-off
+  - MORE NTT calculation logics
+    - at the moment there's only one, but to add more, it's caught by the memory bottle-neck
+- (written at 2025-09-01)
+  - Ping Pong Buffer code can be refactored
+    - fix the two indexes to RAMs
+    - handle the indexes via FSM
+  - 
+
+# CBD
+
+> **Centered binomial distribution**, it's the method Kyber used to generate the "errors." The range of number is -*eta* ~ +*eta*, and *eta* can be 2 or 3 depends on the security level (parameter sets) selected.
+
+## Design rationale
+
+- for ML-KEM-768, only the eta = 2 is implemented
+- **RAM**: true dual port RAM
+  - array depth of 32 (32 slots)
+  - array width of 32 (23 bit number)
+
+- stages
+  1. writing two 32 bit hashes into RAM
+  2. upon completion of hash writing, start sampling CBD by reading hash from RAM port 1 and writing the sampled hash to RAM port 2
+     - in `cbd2_cal` the sampled number will be 4 bit wide to represent numbers in {-2,-1,0,1,2}, in hexadecimal representation will be {0xF,0xE,0x0,0x1,0x2}  
+     - it stitch the sampled hash, total of 8 numbers, back into 32 bit block to save space (e.g. {-1,-2,0,2,1,0,1,-2} -> 0xFE02101F)
+  3. once the sampling completes, raise `ok_out` to high. the external module can raise `readout` to high to signal the `cbd.v` module to output the stored numbers once
+     - uses a timer to regulate serializing the 32 bit block that contains 8 numbers
+     - since the "error" for encryption is considered secret, should be discarded, and should not be reused, I made the decision to force external module not to request the same "error" once cbd module completes full output.
+
+## potential improvements 
+- (written at 2025-08-15)
+  - separation of FSM and calculations
+    - the current iteration is very "spaghetti" and akin to a software design
+    - ideally there should be states and the calculation logic operate based on the states, and the states changes based on the signals from calculation logic 
+  - MORE calculation logics
+    - the calculation is only 24 logic elements, more should be possible if the memory allows
