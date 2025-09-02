@@ -28,7 +28,7 @@ module basemul_tomont #(parameter DEPTH = 8)(
   output wire signed [15:0] basemul_dout_2,
   output wire [DEPTH-1:0] out_index,
 
-  // misc
+  // FLAGs
   output wire readin_a_ok,
   output wire readin_b_ok,
   output wire done
@@ -98,6 +98,13 @@ wire [15:0]      ramc_dout_1, ramc_dout_2;
 assign basemul_dout_1 = (done & readout) ? ramc_dout_1 : 0;
 assign basemul_dout_2 = (done & readout) ? ramc_dout_2 : 0;
 assign out_index      = (done) ? index_c - 2 : 0;
+
+/*
+// TODO: RAM input will reflect on output, this can be further pipelined
+assign basemul_dout_1 = ramc_dout_1;
+assign basemul_dout_2 = ramc_dout_2;
+assign out_index      = index_c - 2;
+*/
 
 dual_ram #(DEPTH, 16) rama(
   .clk(clk),

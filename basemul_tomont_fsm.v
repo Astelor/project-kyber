@@ -137,9 +137,6 @@ always @(posedge clk or posedge reset) begin
         done <= 0;
         rama_we_ok <= 1;
         ramb_we_ok <= 1;
-        readin_a_ok <= 1;
-        readin_b_ok <= 1;
-
         readin_a_ok <= 1; // pulse
         readin_b_ok <= 1;
 
@@ -198,7 +195,7 @@ always @(posedge clk or posedge reset) begin
       end
       STAT_S3_1 : begin
         cal_pulse   <= 1; // clearing index_c/counter/k
-
+        done <= 0;
       end
     endcase
   end
