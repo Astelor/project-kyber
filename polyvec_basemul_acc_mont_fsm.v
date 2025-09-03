@@ -5,7 +5,8 @@ module polyvec_basemul_acc_mont_fsm #(parameter DEPTH = 8)(
 
   input [DEPTH-1:0] counter,
   input bm_done,
-
+  input full_in,
+  input cal_en,
 
   output reg [2:0] k, 
   
@@ -13,7 +14,7 @@ module polyvec_basemul_acc_mont_fsm #(parameter DEPTH = 8)(
   output reg bm_readin_a,
   output reg bm_readin_b,
   
-  output reg cal_en,
+  output reg bm_cal_en,
   output reg bm_full_in_a,
   output reg bm_full_in_b,
   output reg bm_readout,
@@ -28,18 +29,19 @@ module polyvec_basemul_acc_mont_fsm #(parameter DEPTH = 8)(
   output reg ram_b_we_ok,
   output reg ram_c_we_ok,
 
+  output reg barr_redc,
+  
   output reg readin_a_ok,
   output reg readin_b_ok,
 
-  output reg barr_redc,
-
-
+  output reg isload,
   output reg done
 );
 
 // STATES
 localparam STAT_S0   = 1;
 localparam STAT_S0_1 = 2;
+localparam STAT_S1   = 3;
 
 localparam LOAD_S0   = 10;
 localparam LOAD_S0_1 = 11;
@@ -68,8 +70,8 @@ reg [7:0] curr_state;
 reg [7:0] next_state;
 
 always @(posedge clk or posedge reset) begin
-  if(reset)
-    curr_state <= LOAD_S0;
+  if(reset) 
+    curr_state <= STAT_S0;
   else
     curr_state <= next_state; 
 end
@@ -82,9 +84,16 @@ always @(*) begin
         next_state = STAT_S0_1;
       end
       STAT_S0_1 : begin
-        //if(full_in)
-
-        next_state = STAT_S0_1;
+        if(full_in)
+          next_state = STAT_S1;
+        else
+          next_state = STAT_S0_1;
+      end
+      STAT_S1 : begin
+        if(cal_en)
+          next_state = LOAD_S0;
+        else
+          next_state = STAT_S1;
       end
       LOAD_S0 : begin // pulse
         next_state = LOAD_S0_1;
@@ -99,7 +108,10 @@ always @(*) begin
         next_state = LOAD_S1_1;
       end
       LOAD_S1_1 : begin
-        next_state = LOAD_S1_2;
+        if(~bm_done)
+          next_state = LOAD_S1_2;
+        else
+          next_state = LOAD_S1_1;
       end
       LOAD_S1_2 : begin
         if(bm_done)
@@ -169,7 +181,7 @@ always @(*) begin
         next_state = DOUT_S0_1;
       end
       DOUT_S0_1 : begin
-        next_state = DOUT_S0_1;
+        next_state = STAT_S0;
       end
       default: begin
         $display("[%0t] forbidden state", $time);
@@ -184,6 +196,7 @@ always @(posedge clk or posedge reset) begin
     k <= 1;
     index_a_ctrl <= 0;
     index_b_ctrl <= 0;
+    index_c_ctrl <= 0;
     
     bm_readin_a <= 0;
     bm_readin_b <= 0;
@@ -194,12 +207,19 @@ always @(posedge clk or posedge reset) begin
     ram_b_we_ok <= 0;
     ram_c_we_ok <= 0;
     barr_redc <= 0;
+    isload <= 0;
     done <= 0;
   end
   else if(set) begin
     case (curr_state)
       STAT_S0 : begin
         //done <= 0; // ?
+        isload <= 0;
+        index_a_ctrl <= 0;
+        index_b_ctrl <= 0;
+        //index_c_ctrl <= 0;
+        counter_ctrl <= 0;
+        
         ram_a_we_ok <= 1;
         ram_b_we_ok <= 1;
         
@@ -210,7 +230,14 @@ always @(posedge clk or posedge reset) begin
         readin_a_ok <= 0; // pulse
         readin_b_ok <= 0;
       end
+      STAT_S1 : begin
+        ram_a_we_ok <= 0;
+        ram_b_we_ok <= 0;
+
+      end
       LOAD_S0 : begin
+        done <= 0;
+        isload <= 1;
         index_a_ctrl <= 1;
         index_b_ctrl <= 1;
         k <= 1;
@@ -233,10 +260,10 @@ always @(posedge clk or posedge reset) begin
       LOAD_S1_1 : begin
         bm_full_in_a <= 0; // pulse
         bm_full_in_b <= 0; 
-        cal_en <= 1; // pulse
+        bm_cal_en <= 1; // pulse
       end
       LOAD_S1_2 : begin // wait for bm_done
-        cal_en <= 0; // pulse
+        bm_cal_en <= 0; // pulse
       end
       LOAD_S2 : begin //pulse
         bm_readout <= 1;
@@ -272,10 +299,10 @@ always @(posedge clk or posedge reset) begin
       LOAD_S3_1 : begin
         bm_full_in_a <= 0;
         bm_full_in_b <= 0;
-        cal_en <= 1; // pulse
+        bm_cal_en <= 1; // pulse
       end
       LOAD_S3_2 : begin
-        cal_en <= 0; // pulse
+        bm_cal_en <= 0; // pulse
       end
       LOAD_S3_3 : begin // wait for bm_done
         // no op
@@ -308,10 +335,10 @@ always @(posedge clk or posedge reset) begin
 
         ram_c_we_ok <= 0;
         
-        cal_en <= 1; // pulse, clear the flags :>
+        bm_cal_en <= 1; // pulse, clear the flags :>
       end
       REDC_S0_1 : begin
-        cal_en <= 0;
+        bm_cal_en <= 0;
         
         index_c_ctrl <= 1;
         counter_ctrl <= 1;
@@ -323,13 +350,14 @@ always @(posedge clk or posedge reset) begin
         
       end
       DOUT_S0 : begin
+        isload <= 0;
         barr_redc <= 0;
         ram_c_we_ok <= 0;
         index_c_ctrl <= 0;
-        cal_en <= 1; // pulse
+        bm_cal_en <= 1; // pulse
       end
       DOUT_S0_1 : begin
-        cal_en <= 0; // pulse
+        bm_cal_en <= 0; // pulse
         index_c_ctrl <= 1;
         done <= 1; // all done!
         

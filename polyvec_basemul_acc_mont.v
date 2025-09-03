@@ -20,14 +20,21 @@ module polyvec_basemul_acc_mont #(parameter DEPTH = 8)(
   input wire signed [15:0] polyvec_din_a_1,
   input wire signed [15:0] polyvec_din_a_2,
   input wire [DEPTH-1:0] ina_index,
+  input wire [3:0] ina_k,
   // INPUT TO RAM B
   input wire signed [15:0] polyvec_din_b_1,
   input wire signed [15:0] polyvec_din_b_2,
   input wire [DEPTH-1:0] inb_index,
+  input wire [3:0] inb_k,
+
   // OUTPUT TO OUTSIDE
   output wire signed [15:0] polyvec_dout_1,
   output wire signed [15:0] polyvec_dout_2,
   output wire [DEPTH-1:0] out_index,
+
+  output wire readin_a_ok,
+  output wire readin_b_ok,
+
   output wire done
 );
 
@@ -169,9 +176,11 @@ barrett_reduce barr2(
 );
 
 // LOCAL FSM 
+// | INPUT
 wire [DEPTH-1:0] counter_fsm;
 wire [2:0] k;
-
+wire full_in_fsm;
+// | OUTPUT
 wire bm_readin_a_fsm;
 wire bm_readin_b_fsm;
 
@@ -185,14 +194,16 @@ wire index_b_ctrl;
 wire index_c_ctrl;
 wire counter_ctrl;
 
-wire bm_readin_a_ok_fsm;
-wire bm_readin_b_ok_fsm;
 
 wire ram_a_we_ok_fsm;
 wire ram_b_we_ok_fsm;
 wire ram_c_we_ok_fsm;
 
+wire readin_a_ok_fsm;
+wire readin_b_ok_fsm;
+
 wire barr_redc;
+wire isload;
 
 polyvec_basemul_acc_mont_fsm #(DEPTH) fsm(
   .clk(clk),
@@ -201,13 +212,14 @@ polyvec_basemul_acc_mont_fsm #(DEPTH) fsm(
   
   .counter(counter_fsm),
   .bm_done(bm_done),
-  
+  .full_in(full_in_fsm),
+  .cal_en(cal_en),
   // OUTPUT
   .k(k),
   .bm_readin_a(bm_readin_a_fsm),
   .bm_readin_b(bm_readin_b_fsm),
   
-  .cal_en(cal_en_fsm),
+  .bm_cal_en(cal_en_fsm),
   .bm_full_in_a(bm_full_in_a_fsm),
   .bm_full_in_b(bm_full_in_b_fsm),
   .bm_readout(bm_readout_fsm),
@@ -222,7 +234,11 @@ polyvec_basemul_acc_mont_fsm #(DEPTH) fsm(
   .ram_c_we_ok(ram_c_we_ok_fsm),
   
   .barr_redc(barr_redc),
-
+  
+  .readin_a_ok(readin_a_ok_fsm),
+  .readin_b_ok(readin_b_ok_fsm),
+  
+  .isload(isload),
   .done(done)
 );
 
@@ -234,6 +250,7 @@ reg [DEPTH-1:0] counter;
 reg readin_a_ok_r;
 reg readin_b_ok_r; 
 
+/*
 // RAM A ====================
 reg [DEPTH-1:0] r_ram_a_addr_1 [0:2], r_ram_a_addr_2 [0:2]; 
 reg [15:0]      r_ram_a_din_1  [0:2], r_ram_a_din_2  [0:2];
@@ -251,49 +268,67 @@ reg [15:0] r_bm_din_a_2;
 // | INPUT TO RAMb
 reg [15:0] r_bm_din_b_1;
 reg [15:0] r_bm_din_b_2;
+*/
 // INTERNAL REGS end ====================================//
 
 // ASSIGN begin =========================================//
+/*
 assign bm_din_a_1 = r_bm_din_a_1;
 assign bm_din_a_2 = r_bm_din_a_2;
 
 assign bm_din_b_1 = r_bm_din_b_1;
 assign bm_din_b_2 = r_bm_din_b_2;
+*/
 
 generate // TODO: global param for KYBER_K
   for (i = 0; i < 3 /*KYBER_K*/; i = i + 1) begin : GENASSIGN
-    // RAM A
+    /*
     assign ram_a_addr_1[i] = r_ram_a_addr_1[i];
     assign ram_a_addr_2[i] = r_ram_a_addr_2[i];
 
     assign ram_b_addr_1[i] = r_ram_b_addr_1[i];
     assign ram_b_addr_2[i] = r_ram_b_addr_2[i];
-
-    /*
-    assign ram_a_addr_1[i] = (k == i + 1) ? index_a     : 'dz ,
-           ram_a_addr_2[i] = (k == i + 1) ? index_a + 1 : 'dz ;
-    // RAM B
-    assign ram_b_addr_1[i] = (k == i + 1) ? index_b     : 'dz ,
-           ram_b_addr_2[i] = (k == i + 1) ? index_b + 1 : 'dz ;
-    // BASEMUL
-    assign bm_din_a_1 = (k == i + 1) ? ram_a_dout_1[i] : 'dz ,
-           bm_din_a_2 = (k == i + 1) ? ram_a_dout_2[i] : 'dz ;
-    assign bm_din_b_1 = (k == i + 1) ? ram_b_dout_1[i] : 'dz ,
-           bm_din_b_2 = (k == i + 1) ? ram_b_dout_2[i] : 'dz ;
     */
-    assign ram_a_we[i] = ram_a_we_ok_fsm & readin_a; // modify for top level readin
-    assign ram_b_we[i] = ram_b_we_ok_fsm & readin_b;
-    
+    // RAM A
+    assign ram_a_addr_1[i] = ((~isload) & (ina_k == i)) ? ina_index     : 
+                             (k == i + 1              ) ? index_a       : 
+                                                          0;
+    assign ram_a_addr_2[i] = ((~isload) & (ina_k == i)) ? ina_index + 1 :
+                             (k == i + 1              ) ? index_a   + 1 : 
+                                                          0 ;
+    // RAM B
+    assign ram_b_addr_1[i] = ((~isload) & (inb_k == i)) ? inb_index     :
+                             (k == i + 1              ) ? index_b       : 
+                                                          0;
+    assign ram_b_addr_2[i] = ((~isload) & (inb_k == i)) ? inb_index + 1 :
+                             (k == i + 1              ) ? index_b   + 1 : 
+                                                          0 ;
+    assign ram_a_din_1[i] = (ina_k == i) ? polyvec_din_a_1 : 0 ;
+    assign ram_b_din_1[i] = (inb_k == i) ? polyvec_din_b_1 : 0 ;
+
+    assign ram_a_din_2[i] = (ina_k == i) ? polyvec_din_a_2 : 0 ;
+    assign ram_b_din_2[i] = (inb_k == i) ? polyvec_din_b_2 : 0 ;
+    /*
+    // BASEMUL
+    assign bm_din_a_1 = (k == i + 1) ? ram_a_dout_1[i] : 0 ,
+           bm_din_a_2 = (k == i + 1) ? ram_a_dout_2[i] : 0 ;
+    assign bm_din_b_1 = (k == i + 1) ? ram_b_dout_1[i] : 0 ,
+           bm_din_b_2 = (k == i + 1) ? ram_b_dout_2[i] : 0 ;
+    */
+
+    assign ram_a_we[i] = (ina_k == i) & (~isload) & readin_a & readin_a_ok_r; // modify for top level readin
+    assign ram_b_we[i] = (inb_k == i) & (~isload) & readin_b & readin_a_ok_r;
+
     // RAM C
     if(i < 2) begin : RAMC // RAM C is two no matter the KYBER_K
       // port 1 read, port 2 write
       assign ram_c_we_1[i]   = 0;
       assign ram_c_we_2[i]   = ram_c_we_ok_fsm;
       // port 1 read, port 2 write
-      assign ram_c_addr_1[i] =  (index_c_ctrl  ) ? index_c : 'dz ; // read
+      assign ram_c_addr_1[i] =  (index_c_ctrl  ) ? index_c : 0 ; // read
       assign ram_c_addr_2[i] =  (barr_redc     ) ? index_c - 2 :
                                 (bm_readout_fsm) ? bm_out_index >> 1 : 
-                                                 'dz                 ; // write
+                                                   0                 ; // write
     end
   end
 endgenerate
@@ -301,15 +336,33 @@ endgenerate
 assign ram_c_din_2[0] = (barr_redc                ) ? barr1_t                     :
                         (bm_readout_fsm & (k <  3)) ? bm_dout_1                   :
                         (bm_readout_fsm & (k >= 3)) ? bm_dout_1 + ram_c_dout_1[0] :
-                                                      'dz ; // 0
+                                                      0 ; // 0
 assign ram_c_din_2[1] = (barr_redc                ) ? barr2_t                     :
                         (bm_readout_fsm & (k <  3)) ? bm_dout_2                   :
                         (bm_readout_fsm & (k >= 3)) ? bm_dout_2 + ram_c_dout_1[1] : 
-                                                      'dz ; // 1
-assign barr1_a = (barr_redc) ? ram_c_dout_1[0] : 'dz;
-assign barr2_a = (barr_redc) ? ram_c_dout_1[1] : 'dz;
+                                                      0 ; // 1
+assign barr1_a = (barr_redc) ? ram_c_dout_1[0] : 0;
+assign barr2_a = (barr_redc) ? ram_c_dout_1[1] : 0;
 
 // BASEMUL =================================
+assign bm_din_a_1 = (k == 1) ? ram_a_dout_1[0] :
+                    (k == 2) ? ram_a_dout_1[1] :
+                    (k == 3) ? ram_a_dout_1[2] : 
+                               0;
+assign bm_din_a_2 = (k == 1) ? ram_a_dout_2[0] :
+                    (k == 2) ? ram_a_dout_2[1] :
+                    (k == 3) ? ram_a_dout_2[2] : 
+                               0;
+
+assign bm_din_b_1 = (k == 1) ? ram_b_dout_1[0] :
+                    (k == 2) ? ram_b_dout_1[1] :
+                    (k == 3) ? ram_b_dout_1[2] : 
+                               0;
+assign bm_din_b_2 = (k == 1) ? ram_b_dout_2[0] :
+                    (k == 2) ? ram_b_dout_2[1] :
+                    (k == 3) ? ram_b_dout_2[2] : 
+                               0;
+
 assign bm_in_a_index = index_a - 2;
 assign bm_in_b_index = index_b - 2;
 
@@ -325,34 +378,70 @@ assign bm_readout = bm_readout_fsm;
 assign counter_fsm = counter;
 
 // INPUT/OUTPUT =============================
-assign polyvec_dout_1 = (done & readout) ? ram_c_dout_1[0] : 'dz; 
-assign polyvec_dout_2 = (done & readout) ? ram_c_dout_1[1] : 'dz;
-assign out_index      = (done) ? index_c - 1 : 'dz; 
+assign polyvec_dout_1 = (done & readout) ? ram_c_dout_1[0] : 0; 
+assign polyvec_dout_2 = (done & readout) ? ram_c_dout_1[1] : 0;
+assign out_index      = (done) ? index_c - 1 : 0; 
 
+assign readin_a_ok = readin_a_ok_r;
+assign readin_b_ok = readin_b_ok_r;
 
+assign full_in_fsm = (~readin_a_ok_r) & (~readin_b_ok_r);
 // ASSIGN end ===========================================//
 
-reg [3:0] ii;
-
 always @(*) begin
-  //readin_a_ok_r = (readin_a_ok_r | readin_a_ok_fsm)
-  case (k)
-    1 : begin
-      mytask(0);
-    end 
-    2 : begin
-      mytask(1);
-    end
-    3 : begin
-      mytask(2);
-    end
-    default: begin
-      mytask(3);
-    end 
-  endcase
+  readin_a_ok_r = (readin_a_ok_r | readin_a_ok_fsm) & (~full_in_a);
+  readin_b_ok_r = (readin_b_ok_r | readin_b_ok_fsm) & (~full_in_b);
 end
 
-task mytask (input [3:0] kk);
+/*
+reg [3:0] ii;
+always @(*) begin
+  //readin_a_ok_r = (readin_a_ok_r | readin_a_ok_fsm)
+  if(isload) begin
+    case (k)
+      1 : begin
+        bmload(0);
+      end 
+      2 : begin
+        bmload(1);
+      end
+      3 : begin
+        bmload(2);
+      end
+      default: begin
+        bmload(3);
+      end 
+    endcase
+  end
+  else begin
+    case(ina_k)
+      0 : begin
+        topload_a(0);
+      end
+      1 : begin
+        topload_a(1);
+      end
+      2 : begin
+        topload_a(2);
+      end
+    endcase
+    case(inb_k)
+      0 : begin
+        topload_b(0);
+      end
+      1 : begin
+        topload_b(1);
+      end
+      2 : begin
+        topload_b(2);
+      end
+    endcase
+  end
+end
+
+*/
+/*
+task bmload (input [3:0] kk);
   begin
     //generate
       for(ii = 0; ii < 3; ii = ii + 1) begin : K1
@@ -362,7 +451,6 @@ task mytask (input [3:0] kk);
 
           r_ram_b_addr_1[ii] = index_b;
           r_ram_b_addr_2[ii] = index_b + 1;
-
           r_bm_din_a_1 = ram_a_dout_1[ii];
           r_bm_din_a_2 = ram_a_dout_2[ii];
 
@@ -370,22 +458,52 @@ task mytask (input [3:0] kk);
           r_bm_din_b_2 = ram_b_dout_2[ii];
         end
         else begin
-          r_ram_a_addr_1[ii] = 'dz;
-          r_ram_a_addr_2[ii] = 'dz;
+          r_ram_a_addr_1[ii] = 0;
+          r_ram_a_addr_2[ii] = 0;
 
-          r_ram_b_addr_1[ii] = 'dz;
-          r_ram_b_addr_2[ii] = 'dz;
+          r_ram_b_addr_1[ii] = 0;
+          r_ram_b_addr_2[ii] = 0;
+          r_bm_din_a_1 = 0;
+          r_bm_din_a_2 = 0;
 
-          r_bm_din_a_1 = 'dz;
-          r_bm_din_a_2 = 'dz;
-
-          r_bm_din_b_1 = 'dz;
-          r_bm_din_b_2 = 'dz;
+          r_bm_din_b_1 = 0;
+          r_bm_din_b_2 = 0;
         end
       end
     //endgenerate
   end
 endtask
+
+task topload_a(input [3:0] kk);
+  begin
+    for(ii = 0; ii < 3 ; ii = ii + 1) begin
+      if(ii == kk) begin
+        r_ram_a_addr_1[ii] = ina_index;
+        r_ram_a_addr_2[ii] = ina_index + 1;
+      end
+      else begin
+        r_ram_a_addr_1[ii] = 0; 
+        r_ram_a_addr_2[ii] = 0; 
+      end
+    end
+  end
+endtask
+
+task topload_b(input [3:0] kk);
+  begin
+    for(ii = 0; ii < 3 ; ii = ii + 1) begin
+      if(ii == kk) begin
+        r_ram_b_addr_1[ii] = inb_index;
+        r_ram_b_addr_2[ii] = inb_index + 1;
+      end
+      else begin
+        r_ram_b_addr_1[ii] = 0; 
+        r_ram_b_addr_2[ii] = 0; 
+      end
+    end
+  end
+endtask
+*/
 
 always @(posedge clk or posedge reset) begin
   if(reset) begin
@@ -394,31 +512,33 @@ always @(posedge clk or posedge reset) begin
     index_c <= 0;
     counter <= 0;
   end
-  else if(set) begin
-    if(~done)  begin
-      if(index_a_ctrl) begin
-        index_a <= index_a + 2;
-      end
-      if(index_b_ctrl) begin
-        index_b <= index_b + 2;
-      end
-      if(index_c_ctrl) begin
-        index_c <= index_c + 1;
-      end
-      if(counter_ctrl) begin
-        counter <= counter + 1;
-      end
+  else if(set & isload) begin
+    if(index_a_ctrl) begin
+      index_a <= index_a + 2;
     end
-    else begin
-      if(readout & index_c_ctrl) begin
-        index_c <= index_c + 1;
-      end
+    if(index_b_ctrl) begin
+      index_b <= index_b + 2;
+    end
+    if(index_c_ctrl) begin
+      index_c <= index_c + 1;
+    end
+    if(counter_ctrl) begin
+      counter <= counter + 1;
     end
     if(cal_en_fsm) begin // pulse reset
       counter <= 0;
       index_a <= 0;
       index_b <= 0;
       index_c <= 0;
+    end
+  end
+  else if(set & (~isload)) begin
+    if(done & readout & index_c_ctrl) begin
+      index_c <= index_c + 1;
+    end
+    if(cal_en_fsm) begin
+      index_c <= 0;
+      counter <= 0;
     end
   end
 
