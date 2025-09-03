@@ -21,24 +21,24 @@ module invntt_fsm #(parameter DEPTH = 8)(
 );
 
 // timings
-parameter TIM_S0 = 4;
-parameter TIM_S1 = (1 << (DEPTH-1)) - 8;
-parameter TIM_S2 = 5;
-parameter TIM_STATE_S4 = 1;
+localparam TIM_S0 = 4;
+localparam TIM_S1 = (1 << (DEPTH-1)) - 8;
+localparam TIM_S2 = 5;
+localparam TIM_STATE_S4 = 1;
 
 // one-hot encoding
 // TODO: clean up the codes using one-hot encoding
 // 9'b0_0000_0001
-parameter STATE_S0     = 10'b00_0000_0001;
-parameter STATE_S1     = 10'b00_0000_0010;
-parameter STATE_S2     = 10'b00_0000_0100;
-//parameter STATE_S3     = 10'b00_0000_1000;
-parameter STATE_S4     = 10'b00_0001_0000;
-parameter COMPUTE_S0   = 10'b00_0010_0000;
-parameter COMPUTE_S0_1 = 10'b00_0100_0000;
-parameter COMPUTE_S1   = 10'b00_1000_0000;
-parameter COMPUTE_S2   = 10'b01_0000_0000;
-parameter COMPUTE_S2_1 = 10'b10_0000_0000;
+localparam STATE_S0     = 10'b00_0000_0001;
+localparam STATE_S1     = 10'b00_0000_0010;
+localparam STATE_S2     = 10'b00_0000_0100;
+//localparam STATE_S3     = 10'b00_0000_1000;
+localparam STATE_S4     = 10'b00_0001_0000;
+localparam COMPUTE_S0   = 10'b00_0010_0000;
+localparam COMPUTE_S0_1 = 10'b00_0100_0000;
+localparam COMPUTE_S1   = 10'b00_1000_0000;
+localparam COMPUTE_S2   = 10'b01_0000_0000;
+localparam COMPUTE_S2_1 = 10'b10_0000_0000;
 
 reg [9:0] curr_state;
 reg [9:0] next_state;

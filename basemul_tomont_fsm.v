@@ -28,17 +28,17 @@ module basemul_tomont_fsm #(parameter DEPTH = 8)(
 );
 
 // STATES
-parameter STAT_S0   = 1;
-parameter STAT_S0_1 = 2;
-parameter STAT_S1   = 3;
-parameter STAT_S2   = 4;
-parameter STAT_S2_1 = 5;
-parameter STAT_S3   = 6;
-parameter STAT_S3_1 = 7;
+localparam STAT_S0   = 1;
+localparam STAT_S0_1 = 2;
+localparam STAT_S1   = 3;
+localparam STAT_S2   = 4;
+localparam STAT_S2_1 = 5;
+localparam STAT_S3   = 6;
+localparam STAT_S3_1 = 7;
 
-parameter COMP_S0 = 10;
-parameter COMP_S1 = 11;
-parameter COMP_S2 = 12;
+localparam COMP_S0 = 10;
+localparam COMP_S1 = 11;
+localparam COMP_S2 = 12;
 
 reg [7:0] curr_state;
 reg [7:0] next_state;
