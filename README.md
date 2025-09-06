@@ -19,11 +19,62 @@ The `.v` files are Verilog design files written by me, the rest are auto generat
  ┣ 📜.gitignore
  ┣ 📜kyber.v
  ┣ 📜montgomery_reduce.v
+ ┣ 📜barrett_reduce.v
  ┣ 📜fqmul.v
- ┣ 📜tb_mont.v
- ┣ 📜tb_fqmul.v
+ ┣ 📜basemul.v
+ ┣ 📜basemul_tomont.v
+ ┣ 📜polyvec_basemul_acc_mont.v
+ ┣ 📜ntt.v
+ ┣ 📜ntt_cal.v
+ ┣ 📜ct_butfly.v
+ ┣ 📜invntt.v
+ ┣ 📜invntt_cal.v
+ ┣ 📜invntt_fsm.v
+ ┣ 📜fqmul.v
  ┗ 📜README.md
 ```
+
+# Things
+
+> Q: what's up with polynomials? and what is basemul and NTT?
+
+Because the base "items" are polynomials with 256 coefficients, vectors can be think of as an array of polynomials, and matrixes can be think of as a two dimensional array of polynomials.
+
+Since the nature of polynomial multiplication is arduous if one were to do it literally (for example: $3x^2+11x+15 \times 7x^2+9x+321 = ?$), doing a polynomial multiplication with the power of 256 would require the complexity of O(256*256), this is not optimal, so Number Theoretic Transform, NTT, was born.
+
+NTT essentially turn polynomials into a special domain that allows us to do polynomial multiplication "point-to-point." And is it what the `basemul` function is doing in the implementation.
+
+And Inverse NTT transform 
+
+> Q: why are the zetas different from the official FIPS203 specs?
+
+In short, the new zetas are scaled by $2^{16}\mod 3329 = -1044$, the constant is called "**MONT**" in the C implementation.
+
+I referenced the latest C implementation by the [PQ-CRYSTALS](https://github.com/pq-crystals/kyber) team, and they used **Montgomery reduction** for reducing a 32-bit number, (I'm guessing that 32-bit Montgomery reduction is faster than 32-bit Barrett reduction). This reduction method effectively calculates $a\cdot2^{-16}\mod{3329}$ and returns a value between -1664~1664.
+
+When there's a need to multiply, the result product's modulus operation is the Montgomery reduction, and it usually accompanies zetas. Such as in NTT, Inverse NTT, and polynomial multiplication.
+
+The **polynomial multiplication**: is that
+
+- $\text{NTT}(f)=\hat{f}=(\hat{f}_0+\hat{f}_1x,\hat{f}_2+\hat{f}_3x,\dots,\hat{f}_{254}+\hat{f}_{255}x)$
+- and $\hat{f}_{i}\in \mathbb{Z}_q$ 
+- we have $\hat{f}\cdot\hat{g} = \hat{h} = (\hat{f}_{2i}+\hat{f}_{2i+1}x)\cdot(\hat{h}_{2i}+\hat{h}_{2i+1}x) \mod{(x^2 - \zeta^{2\text{br}_7(i)+1})}$
+  - $br_7(i)$: bit reverse the input i, $br_7(1)=64$, $br_7(2)=32$ etc
+  - modulus operation in this case is replace the $x^2$ with the $\zeta^{2\text{br}_7(i)+1}$
+  - $\hat{h} = (\hat{f}_{2i}\hat{h}_{2i} + \hat{f}_{2i+1}\hat{h}_{2i+1}\zeta^{2\text{br}_7(i)+1}) + (\hat{f}_{2i}\hat{h}_{2i+1}+\hat{f}_{2i+1}\hat{h}_{2i})x$
+
+The multiplications are handled by Montgomery reduction, since there's no more prescaled constant to mitigate the $2^{-16} \mod 3329$ in the reduction itself (except for the ones multiplies the zeta, because it is prescaled), the resulting product will be off by a **MONT**.
+
+The polynomial multiplication will always follow an Inverse NTT function, that it puts the **MONT** constant back. Satisfying the correctness of the scheme.
+
+
+> Q: why is there only one zetas? the official specs listed two?
+
+(this has something to do with the quark of montgomery reduction, how inverse ntt's zeta is arranged, and congruence. I haven't completely figure out the first one but the latter two I have)
+
+(you can argue that montgomery reduction is resource heavy and barrett reduction is better, but I argue that a 32-bit barrett reduction can be more expensive, I have no proof)
+
+
 
 # NTT
 
@@ -86,3 +137,54 @@ The `.v` files are Verilog design files written by me, the rest are auto generat
     - ideally there should be states and the calculation logic operate based on the states, and the states changes based on the signals from calculation logic 
   - MORE calculation logics
     - the calculation is only 24 logic elements, more should be possible if the memory allows
+- (written at 2025-09-05)
+  - an externally controlled input index if there's a index tagging system in the future
+  - an internally controlled output index for the ease of module connecting 
+
+# InvNTT
+
+## Design rationale
+
+Similar to NTT but with a finite state machine + counter inside the FSM to control the timing. 
+
+### invntt_cal
+```
+ [zeta or 1397 for the last layer]
+        |  +-----+
+        +->|     |
+f1 - f2 --->|fqmul|---> r1
+            +-----+
+ [-1044 or 1441 for the last layer]
+         |  +-----+
+         +->|     |
+f1 + f2 --->|fqmul|---> r2
+            +-----+
+```
+
+- `fqmul`
+  - Because the very last stage needs to multiply the coefficients by 1441 using montgomery reduction, without adding another layer of multiplication, modifying zeta[1] to 1397 here ($-758\cdot 2^{16-7}\mod 3329$). Using -1044 to cancel out the effect of Montgomery reduce when it's not operating on the last layer.
+- 
+
+# NAMING CONVENTION
+
+> My own creation is confusing me again >:(
+
+- `readin`
+  - external module signaling for incoming data
+- `readout`
+  - external module requesting for data
+  - > if the data is not read then it will not output anything other than its default output
+- `readin_<port>_ok`
+  - module is available to input data
+- `done` or `ok_out`
+  - module is available to output data held in buffer
+- `in<port>_index`
+  - the index to the input data array
+  - > the corresponding index for the data array happens at the same clock cycle, meaning if data[123]=567, then `dout` = 567 and `out_index` = 123
+   > 
+   > if there are two input data ports, such as `din_1` and `din_2`, the internal logic [(usually)](at-the-time-of-writing-I'm-not-sure) limits the `in_index` to only be an even number, `din_1` points to `in_index`+0 and `din_2` points to `in_index`+1
+- `out_index`
+  - the index to the output data array
+  - > if there are two output data, then `out_index` always points to a even number
+
+- anything without a `_cal.v` suffix would contain a RAM as a buffer
