@@ -37,4 +37,25 @@ always @(posedge clk) begin
   end
 end
 
+
+// this is used for stub modules
+task load_mem(input [1:0] type);
+  begin
+    case (type)
+      0: begin
+        $readmemh("/!Github_coding/project-kyber/sim_hash_stub/mem0_hash_stub.hex", mem);
+      end
+      1: begin
+        $readmemh("/!Github_coding/project-kyber/sim_hash_stub/mem1_hash_stub.hex", mem);
+      end
+      2: begin
+        $readmemh("/!Github_coding/project-kyber/sim_hash_stub/mem2_hash_stub.hex", mem);
+      end
+      3: begin
+        $readmemh("/!Github_coding/project-kyber/sim_hash_stub/mem3_hash_stub.hex", mem);
+      end
+    endcase
+  end
+endtask
+
 endmodule
