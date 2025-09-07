@@ -6,7 +6,7 @@ This is the hash module stub for centered binomial distribution module (CBD) for
 [randomness]->[hash module]->[hash stub]->[CBD]
 ```
 
-![hash_stub_gif](/attachments/hash_stub_2025-09-07-025113-optimize1.gif)
+![hash_stub_gif](/attachments/hash_stub_good.gif)
 
 > the gif might need to be optimized -> 99mb will load forever
 
