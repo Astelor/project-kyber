@@ -1,4 +1,7 @@
-module cbd( //
+/*
+TODO: I think the input and output might need a index
+*/
+module cbd(
   input clk,
   input set,
   input reset,

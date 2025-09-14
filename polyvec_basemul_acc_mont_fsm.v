@@ -72,7 +72,7 @@ reg [7:0] next_state;
 always @(posedge clk or posedge reset) begin
   if(reset) 
     curr_state <= STAT_S0;
-  else
+  else if(set)
     curr_state <= next_state; 
 end
 

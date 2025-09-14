@@ -1,5 +1,5 @@
 module tb_ntt;
-parameter DEPTH = 4;
+parameter DEPTH = 8;
 reg clk = 0;
 reg set = 0;
 reg reset = 0;
@@ -41,15 +41,17 @@ initial begin
   #5 set <= 1;
     //readout <= 1;
   #100
-  //$stop
+  $stop
   ;
 end
+/*
 always @(posedge clk) begin
   if(done) begin
-    $stop
+    stop
     ;
   end
 end
+*/
 reg [DEPTH-1:0] index = 0;
 always @(posedge clk) begin
   if(readin) begin

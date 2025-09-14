@@ -47,7 +47,7 @@ always @(posedge clk or posedge reset) begin
   if(reset) begin
     curr_state <= STAT_S0;
   end
-  else begin
+  else if(set) begin
     curr_state <= next_state;
   end
 end

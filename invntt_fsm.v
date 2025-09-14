@@ -52,7 +52,7 @@ always @(posedge clk or posedge reset) begin
     //curr_state <= STATE;
     curr_state <= STATE_S4;
   end 
-  else begin
+  else if(set) begin
     curr_state <= next_state;
   end
 end

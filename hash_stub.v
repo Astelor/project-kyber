@@ -15,6 +15,7 @@ module hash_stub(
   input readout,
   input full_in, 
   input [7:0] nonce, // idk if I should manage this externally 
+  
   input [7:0] hash_din, // serialized 1 byte at a time :>
   input [7:0] in_index, // is 0~255 index enough? or too many? 
 
@@ -55,7 +56,7 @@ dual_ram #(DEPTH, 8) ram_a(
 
 generate
   for(i = 0 ; i < 4 ; i = i + 1) begin : GENRAM
-    dual_ram #(DEPTH, 8) ram_b(
+    dual_ram #(DEPTH, 8) ram_b( //this needs to be larger  
       .clk(clk),
       .we_1  (ram_b_we_1   [i]),
       .we_2  (ram_b_we_2   [i]),
@@ -115,7 +116,7 @@ reg readin_ok_r;
 // ASSIGN BEGIN ===============================//
 // port 1 read, port 2 write
 assign ram_a_we_1 = 0;
-assign ram_a_we_2 = ram_a_we_ok_fsm & readin_ok_r;
+assign ram_a_we_2 = ram_a_we_ok_fsm & readin_ok_r & readin;
 
 assign ram_a_addr_1 = (iscal) ? index_a : 0 ;// yes cal
 assign ram_a_addr_2 = (iscal) ? 0 : in_index; // no cal
@@ -163,7 +164,7 @@ end
 // synthesis translate_on
 
 always @(*) begin
-  readin_ok_r = (readin_ok_r | readin_ok_fsm) & (~full_in);
+  readin_ok_r = (reset) ? 0 : (readin_ok_r | readin_ok_fsm) & (~full_in);
 end
 
 always @(posedge clk or posedge reset) begin
@@ -173,6 +174,7 @@ always @(posedge clk or posedge reset) begin
     index_a <= 0;
     index_b <= 0;
     counter <= 0;
+    
   end
   else if(set) begin
     if(index_a_ctrl) begin
@@ -209,7 +211,6 @@ end
 // with the nonce in :>
 wire [7:0] stub_mem = (counter == 32) ? nonce : ram_a_dout_1;
 // stub logic, write the content of ram_a into a file
-// TODO: you need the nonce!
 always @(posedge clk) begin
   if(set & iscal /*& (~pulse)*/) begin 
     $fwrite(fd1,"%h\n", stub_mem);

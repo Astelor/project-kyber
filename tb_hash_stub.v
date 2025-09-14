@@ -36,6 +36,7 @@ hash_stub bruh(
   .hash_dout_1(hash_dout_1),
   .hash_dout_2(hash_dout_2),
   .out_index(out_index),  
+  
   .readin_ok(readin_ok),
   .done(done)
 );

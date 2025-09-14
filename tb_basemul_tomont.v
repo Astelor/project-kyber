@@ -52,12 +52,12 @@ basemul_tomont #(DEPTH) bruh(
   .done(done)
 );
 
-reg [15:0] mem [ (1<<DEPTH)-1 :0];
 
 always begin
 #5 clk = ~clk;
 end
 
+reg [15:0] mem [ (1<<DEPTH)-1 :0];
 initial begin
   // randomized input data
   //$readmemh("D:/!Github_coding/project-kyber/test/test-invntt-in.hex", mem);

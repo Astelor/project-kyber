@@ -1,5 +1,5 @@
 module tb_polyvec_basemul_acc_mont;
-parameter DEPTH = 5;
+parameter DEPTH = 8;
 
 reg clk = 0;
 reg reset = 0;
