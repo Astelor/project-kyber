@@ -8,13 +8,17 @@ module kyber_pke_enc #(parameter DEPTH = 8)(
   input reset,
   input readin,
   input full_in,
-  //input [3:0] input_type, // indicate what input data it is
   input [7:0] kyber_din,
-  input [7:0] kyber_in_index,
-  // 0: nothing, 1: r, 2: public key?
-  // or should I just port them all in in one go?
-  //input [1:0] input_type,
-
+  input [15:0] kyber_in_index,
+  
+  input [3:0] data_type, // indicate what input data it is
+  output [3:0] input_type, // it's a handshake to ensure the data is what it should be
+    // 0: nothing, 
+    // 1: randomness r, 
+    // 2: (byte array encoded) public key t, 
+    // 3: public key matrix A, 
+    // 4: message m
+    // or should I just port them all in in one go?
   output readin_ok, // big controll
   output done // controlled by FSM
 );
@@ -27,8 +31,8 @@ wire        hash_set;
 wire        hash_readin, hash_readout;
 reg         hash_full_in;
 reg  [7:0]  hash_nonce;
-wire [7:0]  hash_din;
-wire [7:0]  hash_in_index;
+reg  [7:0]  hash_din;
+reg  [7:0]  hash_in_index;
 // - OUTPUT
 wire [31:0] hash_dout_1, hash_dout_2;
 wire [4:0]  hash_out_index;
@@ -137,22 +141,52 @@ barrett_reduce barr2(
   .t  (barr2_t)
 );
 
+// DECODE 12 ================
+wire dec12_set;
+reg  dec12_readin;
+reg  [7:0] dec12_din;
+reg  [15:0] dec12_in_index; // only need up to 9 bits for k = 3
+wire [15:0] dec12_dout_1;
+wire [15:0] dec12_dout_2;
+wire dec12_output_ok;
+wire [15:0] dec12_out_index;
+
+decode12 dec12(
+  .clk(clk),
+  .set(set),
+  .reset(reset),
+  // INPUT 
+  .readin   (dec12_readin),
+  .din      (dec12_din),
+  .in_index (dec12_in_index),
+  // OUTPUT 
+  .output_ok(dec12_output_ok), 
+  .dout_1   (dec12_dout_1),
+  .dout_2   (dec12_dout_2),
+  .out_index(dec12_out_index)
+);
+
+
+// POLYVEC_BASEMUL ==========
 wire polyvec_set;
 wire polyvec_readin_a;
-wire polyvec_readin_b;
+reg  polyvec_readin_b;
+
+wire polyvec_readout;
+wire polyvec_cal_en;
 
 wire polyvec_full_in_a;
-wire polyvec_full_in_b;
+reg  polyvec_full_in_b;
 
 wire [15:0] polyvec_din_a_1;
 wire [15:0] polyvec_din_a_2;
 wire [7:0]  polyvec_ina_index;
 wire [3:0]  polyvec_ina_k;
 
-wire [15:0] polyvec_din_b_1;
-wire [15:0] polyvec_din_b_2;
-wire [7:0]  polyvec_inb_index;
-wire [3:0]  polyvec_inb_k;
+reg  [15:0] polyvec_din_b_1;
+reg  [15:0] polyvec_din_b_2;
+reg  [7:0]  polyvec_inb_index;
+reg  [3:0]  polyvec_inb_k;
 
 wire [15:0] polyvec_dout_1;
 wire [15:0] polyvec_dout_2;
@@ -161,6 +195,7 @@ wire [7:0]  polyvec_out_index;
 wire polyvec_readin_a_ok;
 wire polyvec_readin_b_ok;
 wire polyvec_done;
+
 
 polyvec_basemul_acc_mont polyvec(
   .clk(clk),
@@ -195,7 +230,11 @@ polyvec_basemul_acc_mont polyvec(
 
   .done(polyvec_done)
 );
+
+// INVNTT ===================
+
 // MEMORY
+
 // MODULE INSTANCE END ========================//
 
 
@@ -242,19 +281,26 @@ kyber_pke_enc_fsm fsm(
 
 // INPUT CONTROL
 wire readin_ok_fsm;
-wire [3:0] input_type;
+reg [7:0] stage_0;
+reg [7:0] stage_1; // managed by the input FSM?
+reg [7:0] stage_2;
+reg [7:0] stage_3;
+reg [7:0] stage_4;
+
 kyber_pke_enc_input_fsm input_fsm(
   .clk(clk),
   .set(set),
   .reset(reset),
-  .full_in(full_in), // outside
-  .readin_ok_fsm(readin_ok_fsm),
-  .input_type(input_type),
+
+  .full_in          (full_in), // outside
+  .readin_ok_fsm    (readin_ok_fsm),
+  .input_type       (input_type), // to outside 
 
   .hash_ctrl_status (hash_ctrl_status),
   .input_ctrl_cmd   (input_ctrl_cmd),
   .input_ctrl_status(input_ctrl_status)
 );
+
 
 // HASH CONTROL =============
 // note: hash_s_<flag> = it comboes with another signal
@@ -360,7 +406,6 @@ wire polyvec_s_readin_b;
 wire polyvec_s_full_in_a;
 wire polyvec_s_full_in_b;
 
-
 kyber_pke_enc_polyvec_fsm polyvec_fsm(
   .clk(clk),
   .set(set),
@@ -371,6 +416,9 @@ kyber_pke_enc_polyvec_fsm polyvec_fsm(
   .polyvec_readin_b_ok(polyvec_readin_b_ok),
   // OUTPUT
   .polyvec_s_set      (polyvec_s_set),
+  .polyvec_readout    (polyvec_readout),
+  .polyvec_s_cal_en   (polyvec_cal_en),
+
   .polyvec_s_readin_a (polyvec_s_readin_a),
   .polyvec_s_readin_b (polyvec_s_readin_b),
   .polyvec_full_in_a  (polyvec_s_full_in_a),
@@ -387,7 +435,6 @@ kyber_pke_enc_polyvec_fsm polyvec_fsm(
 
 // LOCAL REG BEGIN ============================//
 reg readin_ok_r;
-
 // LOCAL REG END ==============================//
 
 // ASSIGN BEGIN ===============================//
@@ -396,8 +443,6 @@ assign readin_ok = readin_ok_r;
 // -- HASH
 assign hash_set      = set & hash_s_set;
 assign hash_readin   = readin & hash_s_readin & readin_ok_r; // >:(
-assign hash_din      = kyber_din; // this need a switch case :>
-assign hash_in_index = kyber_in_index;
 
 // -- CBD
 assign cbd_set    = set & cbd_s_set;
@@ -417,6 +462,9 @@ assign barr2_set = set;
 assign barr1_a   = ntt_dout_1;
 assign barr2_a   = ntt_dout_2;
 
+// -- DECODE12
+assign dec12_set = 1; // TODO: does this need a case?
+
 // -- POLYVEC
 assign polyvec_set       = set & polyvec_s_set;
 assign polyvec_readin_a  = ntt_readout & polyvec_s_readin_a;
@@ -426,22 +474,52 @@ assign polyvec_din_a_2   = barr2_t;
 assign polyvec_ina_index = ntt_out_index - 2;
 assign polyvec_full_in_a = polyvec_s_full_in_a;
 
-assign polyvec_readin_b  = 0;
-assign polyvec_full_in_b = polyvec_s_full_in_b;
 // ASSIGN END =================================//
 
 // ALWAYS BLOCK BEGIN =========================//
 
 always @(*) begin
-  // controlled by INPUT FSM
-  case (input_type)
-    1 : begin
-      hash_full_in = /*hash_s_full_in &*/ full_in;
-    end
-    default: begin
-      hash_full_in = hash_s_full_in;
-    end
-  endcase
+  if(input_type == data_type) begin
+    case (input_type) // controlled by INPUT FSM
+      1 : begin
+        hash_full_in  = /*hash_s_full_in &*/ full_in;
+        hash_din      = kyber_din;
+        hash_in_index = kyber_in_index;
+      end
+      2 : begin // only let it do input when command is present
+        hash_full_in  = hash_s_full_in;
+        hash_din      = 0;
+        hash_in_index = 0;
+        
+        dec12_din      = kyber_din;
+        dec12_in_index = kyber_in_index;
+        dec12_readin   = readin & readin_ok_r;
+
+        polyvec_din_b_1   = dec12_dout_1; 
+        polyvec_din_b_2   = dec12_dout_2; // do it with an fsm because it sucks
+        polyvec_readin_b  = dec12_output_ok & polyvec_s_readin_b & readin_ok_r;
+        polyvec_inb_k     = (dec12_out_index & 16'h180) >> 7;
+        polyvec_inb_index = dec12_out_index << 1;
+        polyvec_full_in_b = full_in & polyvec_s_full_in_b;
+      end
+      default: begin
+        // TODO:  set up the other case, 
+        //   or check if having the wire floating is acceptable
+        // HASH
+        hash_full_in  = hash_s_full_in;
+        hash_din      = 0;
+        hash_in_index = 0;
+        // DEC12
+        
+          // dec12_din      = 0;
+          // dec12_in_index = 0;
+          // dec12_readin   = 0;
+
+        // POLYVEC
+        polyvec_full_in_b = 0;
+      end
+    endcase
+  end
 
   readin_ok_r = (reset) ? 0 : (readin_ok_r | readin_ok_fsm) & (~full_in);
 end
@@ -475,4 +553,35 @@ always @(posedge clk or posedge reset) begin
 end
 
 // ALWAYS BLOCK END ===========================//
+endmodule
+
+module input_stage(
+  input clk,
+  input set,
+  input reset,
+  input readin,
+  input [7:0] din,
+  
+  output [15:0] dout_1,
+  output [15:0] dout_2,
+  output ready
+);
+
+reg [7:0] stage [0:3]; 
+reg [2:0] counter;
+always @(posedge clk) begin
+  if(reset) begin
+    stage[0] <= 0;
+    stage[1] <= 0;
+    stage[2] <= 0;
+    stage[3] <= 0;
+    counter <= 0;
+  end
+  else if(set & readin) begin
+    counter <= counter + 1;
+    stage[counter] <= din;
+    //if()
+  end
+end
+
 endmodule

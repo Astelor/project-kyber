@@ -56,7 +56,7 @@ dual_ram #(DEPTH, 8) ram_a(
 
 generate
   for(i = 0 ; i < 4 ; i = i + 1) begin : GENRAM
-    dual_ram #(DEPTH, 8) ram_b( //this needs to be larger  
+    dual_ram #(DEPTH, 8) ram_b(
       .clk(clk),
       .we_1  (ram_b_we_1   [i]),
       .we_2  (ram_b_we_2   [i]),
@@ -164,7 +164,7 @@ end
 // synthesis translate_on
 
 always @(*) begin
-  readin_ok_r = (reset) ? 0 : (readin_ok_r | readin_ok_fsm) & (~full_in);
+  readin_ok_r = (reset) ? 0 : ((readin_ok_r | readin_ok_fsm) & (~full_in));
 end
 
 always @(posedge clk or posedge reset) begin

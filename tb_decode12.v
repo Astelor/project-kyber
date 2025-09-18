@@ -28,7 +28,10 @@ always begin
   #5 clk = ~clk;
 end
 
+reg [7:0] ekt [(1152-1):0];
+
 initial begin
+  $readmemh("D:/!Github_coding/project-kyber/ekt_test.hex", ekt);
   #15 reset <= 1;
   #5 reset <= 0;
   set <= 1;
@@ -36,17 +39,20 @@ initial begin
   $stop
   ;
 end
+reg [15:0] index;
 
 always @(posedge clk or posedge reset) begin
   if(reset) begin
-    readin <= 0;
+    readin   <= 0;
+    index    <= 0;
     in_index <= 0;
-    din <= 3;
+    din      <= 0;
   end
   else if(set & readin) begin
-    din <= $random & 8'hff;
+    din <= ekt[index]; // $random & 8'hff;
             // din + 1;
-    in_index <= in_index + 1;
+    index <= index + 1;
+    in_index <= index;
   end
 end
 

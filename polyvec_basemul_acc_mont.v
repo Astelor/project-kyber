@@ -250,45 +250,12 @@ reg [DEPTH-1:0] counter;
 reg readin_a_ok_r;
 reg readin_b_ok_r; 
 
-/*
-// RAM A ====================
-reg [DEPTH-1:0] r_ram_a_addr_1 [0:2], r_ram_a_addr_2 [0:2]; 
-reg [15:0]      r_ram_a_din_1  [0:2], r_ram_a_din_2  [0:2];
-reg [15:0]      r_ram_a_dout_1 [0:2], r_ram_a_dout_2 [0:2];
-
-// RAM B ====================
-reg [DEPTH-1:0] r_ram_b_addr_1 [0:2], r_ram_b_addr_2 [0:2]; 
-reg [15:0]      r_ram_b_din_1  [0:2], r_ram_b_din_2  [0:2];
-reg [15:0]      r_ram_b_dout_1 [0:2], r_ram_b_dout_2 [0:2];
-
-// BASEMUL ==================
-// | INPUT TO RAMa
-reg [15:0] r_bm_din_a_1;
-reg [15:0] r_bm_din_a_2;
-// | INPUT TO RAMb
-reg [15:0] r_bm_din_b_1;
-reg [15:0] r_bm_din_b_2;
-*/
 // INTERNAL REGS end ====================================//
 
 // ASSIGN begin =========================================//
-/*
-assign bm_din_a_1 = r_bm_din_a_1;
-assign bm_din_a_2 = r_bm_din_a_2;
-
-assign bm_din_b_1 = r_bm_din_b_1;
-assign bm_din_b_2 = r_bm_din_b_2;
-*/
 
 generate // TODO: global param for KYBER_K
   for (i = 0; i < 3 /*KYBER_K*/; i = i + 1) begin : GENASSIGN
-    /*
-    assign ram_a_addr_1[i] = r_ram_a_addr_1[i];
-    assign ram_a_addr_2[i] = r_ram_a_addr_2[i];
-
-    assign ram_b_addr_1[i] = r_ram_b_addr_1[i];
-    assign ram_b_addr_2[i] = r_ram_b_addr_2[i];
-    */
     // RAM A
     assign ram_a_addr_1[i] = ((~isload) & (ina_k == i)) ? ina_index     : 
                              (k == i + 1              ) ? index_a       : 
@@ -308,13 +275,6 @@ generate // TODO: global param for KYBER_K
 
     assign ram_a_din_2[i] = (ina_k == i) ? polyvec_din_a_2 : 0 ;
     assign ram_b_din_2[i] = (inb_k == i) ? polyvec_din_b_2 : 0 ;
-    /*
-    // BASEMUL
-    assign bm_din_a_1 = (k == i + 1) ? ram_a_dout_1[i] : 0 ,
-           bm_din_a_2 = (k == i + 1) ? ram_a_dout_2[i] : 0 ;
-    assign bm_din_b_1 = (k == i + 1) ? ram_b_dout_1[i] : 0 ,
-           bm_din_b_2 = (k == i + 1) ? ram_b_dout_2[i] : 0 ;
-    */
 
     assign ram_a_we[i] = (ina_k == i) & (~isload) & readin_a & readin_a_ok_r; // modify for top level readin
     assign ram_b_we[i] = (inb_k == i) & (~isload) & readin_b & readin_a_ok_r;
@@ -389,121 +349,9 @@ assign full_in_fsm = (~readin_a_ok_r) & (~readin_b_ok_r);
 // ASSIGN end ===========================================//
 
 always @(*) begin
-  readin_a_ok_r = (readin_a_ok_r | readin_a_ok_fsm) & (~full_in_a);
-  readin_b_ok_r = (readin_b_ok_r | readin_b_ok_fsm) & (~full_in_b);
+  readin_a_ok_r = (reset) ? 0 : (readin_a_ok_r | readin_a_ok_fsm) & (~full_in_a);
+  readin_b_ok_r = (reset) ? 0 : (readin_b_ok_r | readin_b_ok_fsm) & (~full_in_b);
 end
-
-/*
-reg [3:0] ii;
-always @(*) begin
-  //readin_a_ok_r = (readin_a_ok_r | readin_a_ok_fsm)
-  if(isload) begin
-    case (k)
-      1 : begin
-        bmload(0);
-      end 
-      2 : begin
-        bmload(1);
-      end
-      3 : begin
-        bmload(2);
-      end
-      default: begin
-        bmload(3);
-      end 
-    endcase
-  end
-  else begin
-    case(ina_k)
-      0 : begin
-        topload_a(0);
-      end
-      1 : begin
-        topload_a(1);
-      end
-      2 : begin
-        topload_a(2);
-      end
-    endcase
-    case(inb_k)
-      0 : begin
-        topload_b(0);
-      end
-      1 : begin
-        topload_b(1);
-      end
-      2 : begin
-        topload_b(2);
-      end
-    endcase
-  end
-end
-
-*/
-/*
-task bmload (input [3:0] kk);
-  begin
-    //generate
-      for(ii = 0; ii < 3; ii = ii + 1) begin : K1
-        if(ii == kk) begin
-          r_ram_a_addr_1[ii] = index_a;
-          r_ram_a_addr_2[ii] = index_a + 1;
-
-          r_ram_b_addr_1[ii] = index_b;
-          r_ram_b_addr_2[ii] = index_b + 1;
-          r_bm_din_a_1 = ram_a_dout_1[ii];
-          r_bm_din_a_2 = ram_a_dout_2[ii];
-
-          r_bm_din_b_1 = ram_b_dout_1[ii];
-          r_bm_din_b_2 = ram_b_dout_2[ii];
-        end
-        else begin
-          r_ram_a_addr_1[ii] = 0;
-          r_ram_a_addr_2[ii] = 0;
-
-          r_ram_b_addr_1[ii] = 0;
-          r_ram_b_addr_2[ii] = 0;
-          r_bm_din_a_1 = 0;
-          r_bm_din_a_2 = 0;
-
-          r_bm_din_b_1 = 0;
-          r_bm_din_b_2 = 0;
-        end
-      end
-    //endgenerate
-  end
-endtask
-
-task topload_a(input [3:0] kk);
-  begin
-    for(ii = 0; ii < 3 ; ii = ii + 1) begin
-      if(ii == kk) begin
-        r_ram_a_addr_1[ii] = ina_index;
-        r_ram_a_addr_2[ii] = ina_index + 1;
-      end
-      else begin
-        r_ram_a_addr_1[ii] = 0; 
-        r_ram_a_addr_2[ii] = 0; 
-      end
-    end
-  end
-endtask
-
-task topload_b(input [3:0] kk);
-  begin
-    for(ii = 0; ii < 3 ; ii = ii + 1) begin
-      if(ii == kk) begin
-        r_ram_b_addr_1[ii] = inb_index;
-        r_ram_b_addr_2[ii] = inb_index + 1;
-      end
-      else begin
-        r_ram_b_addr_1[ii] = 0; 
-        r_ram_b_addr_2[ii] = 0; 
-      end
-    end
-  end
-endtask
-*/
 
 always @(posedge clk or posedge reset) begin
   if(reset) begin

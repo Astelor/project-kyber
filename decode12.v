@@ -21,8 +21,8 @@ module decode12(
   // output reg [3:0] ctrl_status
 );
 
-reg [1:0] counter;
-reg [7:0] stage  ;
+reg [2:0] counter;
+reg [7:0] stage;
 reg [15:0] temp_1;
 reg [15:0] temp_2;
 
@@ -33,34 +33,41 @@ assign dout_2 = (output_ok) ? temp_2 : 0;
 
 always @(posedge clk or posedge reset) begin
   if(reset) begin
-    counter <= 0;
+    counter <= -1;
     out_index <= -1; // so the index acutally starts with 0
-    temp_1 <= 0;
-    temp_2 <= 0;
+    output_ok <= 0;
+    temp_1 <= 'dz;//0;
+    temp_2 <= 'dz;//0;
+    stage  <= 'dz;//0;
+    t <= 0;
   end
   else if(set & readin) begin
     stage <= din;
-    t <= (in_index & 'b11) % 3; // surely this is fine :>
+    // t <= (in_index & 'b11) % 3; // surely this is fine :>
+    t <= in_index % 3;
     // t <= (in_index & 'b11) + 1; // and change the case for t 
     case (t)
       0 : begin
         temp_1 <= stage;
       end
       1 : begin // only unsigned number
-        temp_1 <= (temp_1 | stage << 8) & 'hfff;
+        temp_1 <= (temp_1 | stage << 8) & 12'hfff;
         temp_2 <= stage >> 4;
       end
       2 : begin
-        temp_2 <= (temp_2 | stage << 4) & 'hfff;
+        temp_2 <= (temp_2 | stage << 4) & 12'hfff;
       end
     endcase
-    counter <= counter + 1; // it should reset itself
-    if(counter == 3) begin
-      //counter <= 0;
+    if(counter == 2) begin
+      counter <= 0;
       out_index <= out_index + 1;
+      
       output_ok <= 1;
+      // dout_1 <= temp_1;
+      // dout_2 <= temp_2;
     end
     else begin
+      counter <= counter + 1; // it should reset itself
       output_ok <= 0;
     end
   end

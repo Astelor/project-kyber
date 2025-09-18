@@ -40,7 +40,7 @@ always @(posedge clk or posedge reset) begin
     curr_state <= next_state;
   end
 end
-// NEXT STATE
+// BIG CONTROL NEXT STATE
 always @(*) begin
   if(set) begin
     case (curr_state)
@@ -59,9 +59,9 @@ always @(*) begin
           next_state = HASH_CBD;
       end
       STAGE : begin
-        // if(input_ctrl_status == 4'h0)
-        //   next_state = POLYVEC_EKT;
-        // else
+        if(input_ctrl_status == 4'h0)
+          next_state = POLYVEC_EKT;
+        else
           next_state = STAGE;
       end
       POLYVEC_EKT : begin
@@ -72,8 +72,8 @@ always @(*) begin
     endcase
   end
 end
-// STATE FLAG
-always @(posedge clk or posedge reset) begin
+// BIG CONTROL STATE FLAG
+always @(*) begin
   if(reset) begin
 
     input_cmd(0);
@@ -81,7 +81,7 @@ always @(posedge clk or posedge reset) begin
     cbd_cmd(0);
     ntt_cmd(0);
     polyvec_cmd(0);
-    done <= 0;
+    done = 0;
   end
   else if(set) begin
     case (curr_state)
@@ -102,11 +102,10 @@ always @(posedge clk or posedge reset) begin
       end
       STAGE : begin 
         // when hash finished the output (check status), call for the next input
-        input_cmd(0);
-
+        input_cmd(0); // reset the input fsm
       end
       POLYVEC_EKT : begin
-        input_cmd(2);
+        input_cmd(2); 
       end
 
     endcase
@@ -115,31 +114,31 @@ end
 
 task input_cmd(input [7:0] cmd);
 begin
-  input_ctrl_cmd <= cmd;
+  input_ctrl_cmd = cmd;
 end
 endtask
 
 task hash_cmd(input [7:0] cmd);
 begin
-  hash_ctrl_cmd <= cmd;
+  hash_ctrl_cmd = cmd;
 end
 endtask
 
 task cbd_cmd(input [7:0] cmd);
 begin
-  cbd_ctrl_cmd <= cmd;
+  cbd_ctrl_cmd = cmd;
 end
 endtask
 
 task ntt_cmd(input [7:0] cmd);
 begin
-  ntt_ctrl_cmd <= cmd;
+  ntt_ctrl_cmd = cmd;
 end
 endtask
 
 task polyvec_cmd(input [7:0] cmd);
 begin
-  polyvec_ctrl_cmd <= cmd;
+  polyvec_ctrl_cmd = cmd;
 end
 endtask
 endmodule
@@ -163,13 +162,14 @@ module kyber_pke_enc_input_fsm(
 localparam IDLE               = 1;
 localparam CHOOSE             = 2;
 localparam HASH_INPUT_STAGE   = 3;
-localparam HASH_INPUT_READY   = 4;
+localparam HASH_INPUT_READY   = 4; // pulse
 localparam HASH_INPUT_ACTIVE  = 5;
 localparam HASH_INPUT_DONE    = 6;
 
 localparam EKT_INPUT_STAGE    = 11;
-localparam EKT_INPUT_ACTIVE   = 12;
-localparam EKT_INPUT_DONE     = 13;
+localparam EKT_INPUT_READY    = 12; // pulse
+localparam EKT_INPUT_ACTIVE   = 13;
+localparam EKT_INPUT_DONE     = 14;
 // i don't think it needs a handshake? it's indexed
 
 
@@ -185,6 +185,7 @@ always @(posedge clk or posedge reset) begin
   end
 end
 
+// INPUT CONTROL NEXT STATE 
 always @(*) begin
   if(set) begin
     case (curr_state)
@@ -198,10 +199,11 @@ always @(*) begin
         case (input_ctrl_cmd)
           0 : next_state = CHOOSE;
           1 : next_state = HASH_INPUT_STAGE;
-          // 2 : next_state = something;
+          2 : next_state = EKT_INPUT_STAGE;
           default: next_state = CHOOSE; 
         endcase
       end
+      // HASH =====
       HASH_INPUT_STAGE : begin
         if(hash_ctrl_status == 8'h1)
           next_state = HASH_INPUT_READY;
@@ -223,17 +225,40 @@ always @(*) begin
         else
           next_state = HASH_INPUT_DONE;
       end
+      // EKT ======
+      EKT_INPUT_STAGE : begin
+        // if() 
+        // there's no conflict here,
+        // so I think polyvec doesn't need an explicit flag 
+        // to signal the input fsm
+        next_state = EKT_INPUT_READY;
+      end
+      EKT_INPUT_READY : begin
+        next_state = EKT_INPUT_ACTIVE;
+      end
+      EKT_INPUT_ACTIVE :begin
+        next_state = EKT_INPUT_ACTIVE;
+      end
+      EKT_INPUT_DONE : begin
+        // do I need to have polyvec do a status code??
+        // or can I just have it use the ful_in signal?
+        // it's a bit redundant to give polyvec two concurrent fsms
+        // simply for the use of two inputs
+        // or is it necessary? 
+        next_state = EKT_INPUT_DONE;
+      end
       default:
         $display("forbidden state");
     endcase
   end
 end
 
-always @(posedge clk or posedge reset) begin
+// INPUT FLAG
+always @(*) begin
   if(reset) begin
     status(0);
     type(0);
-    readin_ok_fsm <= 0;
+    readin_ok_fsm = 0;
   end
   else if(set) begin
     case (curr_state)
@@ -241,20 +266,36 @@ always @(posedge clk or posedge reset) begin
         status(0);
         type(0);
       end
+      // HASH ===============
       HASH_INPUT_STAGE : begin
         status(1);
         type(1);
       end
       HASH_INPUT_READY : begin
-        readin_ok_fsm <= 1; // pulse high
+        readin_ok_fsm = 1; // pulse high
       end
       HASH_INPUT_ACTIVE : begin
         status(2);
-        readin_ok_fsm <= 0; // pulse low
+        readin_ok_fsm = 0; // pulse low
       end
       HASH_INPUT_DONE : begin
         status(3);
         // type(0); // no more input :>
+      end
+      // EKT ================
+      EKT_INPUT_STAGE : begin
+        status(8'h11);
+        type(2);
+      end
+      EKT_INPUT_READY : begin
+        readin_ok_fsm = 1; // pulse high
+      end
+      EKT_INPUT_ACTIVE :begin
+        status(8'h12);
+        readin_ok_fsm = 0; // pulse low
+      end
+      EKT_INPUT_DONE : begin
+        status(8'h13);
       end
     endcase
   end
@@ -262,13 +303,13 @@ end
 
 task status(input [7:0] st);
 begin
-  input_ctrl_status <= st;
+  input_ctrl_status = st;
 end
 endtask
 
 task type(input [3:0] tp);
 begin
-  input_type <= tp;
+  input_type = tp;
 end
 endtask
 
@@ -710,7 +751,7 @@ always @(*) begin
           next_state = CALCULATE;
       end
       OUTPUT_READY : begin
-        if(polyvec_ctrl_status == 1)
+        if(polyvec_ctrl_status == 2)
           next_state = OUTPUT;
         else
           next_state = OUTPUT_READY;
@@ -815,10 +856,14 @@ module kyber_pke_enc_polyvec_fsm(
 
   // OUTPUT
   output reg polyvec_s_set,
+  output reg polyvec_readout,
+  output reg polyvec_s_cal_en,
+
   output reg polyvec_s_readin_a,
   output reg polyvec_s_readin_b,
   output reg polyvec_full_in_a,
   output reg polyvec_full_in_b,
+
 
   // BIG CONTROL
   input [7:0]      ntt_ctrl_status,
@@ -828,13 +873,14 @@ module kyber_pke_enc_polyvec_fsm(
 
 localparam IDLE          = 1;
 localparam READY_INPUT   = 2;
-localparam INPUT         = 3;
-localparam START_CAL     = 4;
-localparam CALCULATE     = 5;
-localparam OUTPUT_READY  = 6;
-localparam OUTPUT        = 7;
-localparam OUTPUT_DONE   = 8;
-localparam SEQUENCE_DONE = 9;
+localparam INPUT_1       = 3;
+localparam INPUT_2       = 4;
+localparam START_CAL     = 5;
+localparam CALCULATE     = 6;
+localparam OUTPUT_READY  = 7;
+localparam OUTPUT        = 8;
+localparam OUTPUT_DONE   = 9;
+localparam SEQUENCE_DONE = 10;
 
 reg [7:0] curr_state;
 reg [7:0] next_state;
@@ -860,27 +906,37 @@ always @(*) begin
           next_state = IDLE;
       end
       READY_INPUT : begin
-        if((ntt_ctrl_status  == 8'h4) & 
+        if(/*(ntt_ctrl_status  == 8'h4) & */
            (polyvec_ctrl_cmd == 8'h1)  ) // NTT output ready
-          next_state = INPUT;
+          next_state = INPUT_1;
         else
           next_state = READY_INPUT;
       end
-      INPUT : begin
+      INPUT_1 : begin
+        if(ntt_ctrl_status == 8'h10)
+          next_state = INPUT_2;
+        else
+          next_state = INPUT_1;
+      end
+      INPUT_2 : begin
         if((polyvec_readin_a_ok == 0 ) & 
-           (polyvec_readin_b_ok == 0 ) )
+           (polyvec_readin_b_ok == 0 )  ) // waits until both inputs are done
           next_state = START_CAL;
         else
-          next_state = READY_INPUT;
+          next_state = INPUT_2;
       end
       START_CAL : begin
         next_state = CALCULATE;
       end
       CALCULATE : begin
-        next_state = CALCULATE;
+        if(polyvec_done)
+          next_state = OUTPUT_READY;
+        else
+          next_state = CALCULATE;
       end
       OUTPUT_READY : begin
         next_state = OUTPUT_READY;
+        // should lock memory bank a immediately with full_in_a
       end
       OUTPUT : begin
         next_state = OUTPUT;
@@ -903,6 +959,8 @@ always @(*) begin
   if(reset) begin
     status(0);
     polyvec_s_set      = 0;
+    polyvec_readout    = 0;
+    polyvec_s_cal_en   = 0;
     polyvec_s_readin_a = 0;
     polyvec_s_readin_b = 0;
     polyvec_full_in_a  = 0;
@@ -918,16 +976,24 @@ always @(*) begin
       end
       READY_INPUT : begin
         status(1);
-        // polyvec_s_readin_b = 1;
+        polyvec_s_readin_b = 1; // full_in where??
+        polyvec_full_in_b  = 1;
       end
-      INPUT : begin
+      INPUT_1 : begin
         status(2);
         polyvec_s_readin_a = 1;
       end
+      INPUT_2 : begin
+        polyvec_full_in_a = 1;
+      end
       START_CAL : begin
+        polyvec_full_in_a = 0;
+        polyvec_full_in_b = 0;
+        polyvec_s_cal_en  = 1;
       end
       CALCULATE : begin
         status(3);
+        polyvec_s_cal_en  = 0;
       end
       OUTPUT_READY : begin
         status(4);
@@ -939,7 +1005,8 @@ always @(*) begin
         status(6);
       end
       SEQUENCE_DONE : begin
-
+        status(8'h10);
+        // polyvec_full_in_a = 1;
       end
     endcase
   end

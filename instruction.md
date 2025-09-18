@@ -26,12 +26,8 @@
 
 ## hash_ctrl_cmd
 - 00: idle
-- 01: "hash and cbd you guys should talk and figure it out :)"
-- 02: "hash and polybm you guys should talk and figure it out"
-
-- 01: "hey input this!" input randomness from outside ()
-- 02: "hey there's no more input, start doing cal"
-- 03: "hey do the output"
+- 01: hash → cbd (error polynomials, y, e1, e2)
+- 02: hash → polyvec_bm (matrix A public key seed generation)
 
 > I think the full_in signal can purely be handled by hash FSM?
 > The only explicit "start_cal" signal for this is `full_in` and the nonce will go with it, and nonce not even a latch
@@ -41,9 +37,9 @@
 
 ## cbd_ctrl_cmd
 - 00: idle
-- 01: "hash and cbd you guys should talk and figure it out :)"
-- 01: "hey input from hash now" input from hash
-- 02: 
+- 01: hash → cbd → ntt "hash and cbd you guys should talk and figure it out :)"
+- 02: hash → cbd → buffer1 (error polynomial e2)
+- 03: hash → cbd → ? (error polynomial vector e1)
 
 # STATUS
 > status code from module controls (small control)
@@ -70,7 +66,7 @@
 - 06: I've finished the output!
 
 - 10: hey I've finished the sequence for the command, tell me to do something else >:(
-- 
+
 > where the heck do I manage the sub sequence???
 
 ## cbd_ctrl_status
@@ -81,6 +77,10 @@
 - 04: output ready
 - 05: outputing...
 - 06: I've finished the output!
+
+- 10: sequence 1, for command 1 finished
+- 20: sequence 2, for command 2 finished
+ 
  
  > keep the sequencing internal?
  > -> when the command is present, act on the sequence?
@@ -94,6 +94,7 @@
 - 05: outputing...
 - 06: I've finished the output!
 
+- 10: sequence 1 done
 
 ## polyvec_basemul
 
