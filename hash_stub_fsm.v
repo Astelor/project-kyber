@@ -5,7 +5,7 @@ module hash_stub_fsm(
 
   input full_in, // from external
   input [7:0] counter,
-  input shake128_done,
+  input shake256_done,
   output reg iscal,
   
   output reg index_a_ctrl,
@@ -14,7 +14,7 @@ module hash_stub_fsm(
 
   output reg ram_a_we_ok,
   output reg ram_b_we_ok,
-  output reg shake128_full_in, // stub
+  output reg shake256_full_in, // stub
   output reg pulse, // this is used for resetting counters
   output reg readin_ok, // pulse
   output reg done // to external
@@ -66,7 +66,7 @@ always @(*) begin
         next_state = STAT_S2_1;
       end
       STAT_S2_1 : begin 
-        if(shake128_done) // the python script did the thing!
+        if(shake256_done) // the python script did the thing!
           next_state = STAT_S3;
         else
           next_state = STAT_S2_1;
@@ -90,7 +90,7 @@ always @(posedge clk or posedge reset) begin
     ram_a_we_ok  <= 0;
     ram_b_we_ok  <= 0; // not assigned in states
     readin_ok    <= 0;
-    shake128_full_in <= 0;
+    shake256_full_in <= 0;
     done <= 0;
     pulse <= 0;
   end
@@ -123,11 +123,11 @@ always @(posedge clk or posedge reset) begin
         pulse <= 1;
       end
       STAT_S2_1 : begin
-        shake128_full_in <= 1;
+        shake256_full_in <= 1;
         pulse <= 0;
       end
       STAT_S3 : begin
-        shake128_full_in <= 0;
+        shake256_full_in <= 0;
         index_b_ctrl <= 1;
         done <= 1;
       end

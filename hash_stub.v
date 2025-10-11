@@ -78,9 +78,9 @@ wire counter_ctrl;
 wire ram_a_we_ok_fsm;
 wire ram_b_we_ok_fsm;
 wire [7:0] counter_fsm;
-wire shake128_full_in;
-reg [7:0] shake128_done_read;
-wire shake128_done = shake128_done_read - 'd48;
+wire shake256_full_in;
+reg [7:0] shake256_done_read;
+wire shake256_done = shake256_done_read - 'd48;
 wire readin_ok_fsm;
 wire pulse;
 
@@ -92,7 +92,7 @@ hash_stub_fsm fsm(
   // INPUT
   .full_in(full_in), // from external
   .counter(counter_fsm),
-  .shake128_done(shake128_done),
+  .shake256_done(shake256_done),
   // OUTPUT
   .iscal(iscal),
   .index_a_ctrl(index_a_ctrl),
@@ -100,7 +100,7 @@ hash_stub_fsm fsm(
   .counter_ctrl(counter_ctrl),
   .ram_a_we_ok(ram_a_we_ok_fsm),
   .ram_b_we_ok(ram_b_we_ok_fsm),
-  .shake128_full_in(shake128_full_in),
+  .shake256_full_in(shake256_full_in),
   .pulse(pulse),
   .readin_ok(readin_ok_fsm), // pulaw
   .done(done) // to external 
@@ -192,12 +192,12 @@ always @(posedge clk or posedge reset) begin
       index_b <= 0;
       counter <= 0;
     end
-    $fwrite(fd2,"%b", shake128_full_in);
+    $fwrite(fd2,"%b", shake256_full_in);
     $rewind(fd2);
-    $fread(shake128_done_read, fd3, 0, 1);
+    $fread(shake256_done_read, fd3, 0, 1);
     $rewind(fd3);
 
-    if(shake128_done) begin
+    if(shake256_done) begin
       // synthesis translate_off
       GENRAM[0].ram_b.load_mem(0);
       GENRAM[1].ram_b.load_mem(1);

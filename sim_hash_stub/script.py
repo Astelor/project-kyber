@@ -1,6 +1,6 @@
 import sys
 from time import sleep
-from hashlib import shake_128
+from hashlib import shake_256
 import string
 
 fd1 = open("./hash.flag","r") # shake_full_in
@@ -37,7 +37,7 @@ while 1:
             mem2 = open("./mem2_hash_stub.hex","w") # the completed hash
             mem3 = open("./mem3_hash_stub.hex","w") # the completed hash
             temp1 = bytes.fromhex(temp1)
-            h1 = shake_128(temp1)
+            h1 = shake_256(temp1)
             gest = h1.digest(64*2).hex() # in bytes
             #gest = gest.hex() # in hex
             # put them in memory banks 32*4 
