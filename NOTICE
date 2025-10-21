@@ -1,10 +1,11 @@
-This project includes code derived from the CRYSTALS-Kyber reference implementation,
-which is licensed under the Apache License, Version 2.0.
+This project is a Verilog translation of the CRYSTALS-Kyber reference implementation.
 
 Original source:
 https://github.com/pq-crystals/kyber
 Copyright (c) 2019-2024 pq-crystals authors
 List of original authors: see AUTHORS file in the original repository.
+Licensed under the Apache License 2.0 or CC0
 
 Modifications and Verilog translation:
 Copyright (c) 2025 Astelor
+Licensed under the Apache License 2.0
