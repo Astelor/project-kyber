@@ -20,6 +20,7 @@ module invntt #(parameter DEPTH = 8)(
   output reg signed [15:0] invntt_dout_1,
   output reg signed [15:0] invntt_dout_2,
   output reg [DEPTH-1:0] out_index,
+  output reg valid_out, // a flag noting the correct data (data_out matches the index)
   // misc
   output wire readin_ok,
   output wire done
@@ -114,6 +115,12 @@ reg [DEPTH-1:0] index;
 reg [DEPTH-1:0] len;
 reg [6:0] k;
 
+reg [DEPTH-1:0] out_index_t_1;
+reg [DEPTH-1:0] out_index_t_2;
+
+reg valid_out_t_1;
+reg valid_out_t_2;
+
 reg [DEPTH-1:0] wr_index;
 reg [DEPTH-1:0] wr_len;
 
@@ -131,6 +138,7 @@ always @(posedge clk or posedge reset) begin
     wr_len <= 2;
     k <= 127;
     full_out <= 0;
+    valid_out_t_1 <= 0;
   end
   else if (set) begin
     // calculation
@@ -161,11 +169,14 @@ always @(posedge clk or posedge reset) begin
       end
     end
     else if(done == 1 && readout == 1) begin
-      if(wr_index >= (1<<DEPTH)-2 ) begin
+      if(out_index_t_1 >= (1<<DEPTH)-2 ) begin
         full_out <= 1;
+        valid_out_t_1 <= 0;
       end
       else begin
         wr_index <= wr_index + 2;
+        if(full_out == 0)
+          valid_out_t_1 <= 1; // this lines up with the valid data, which is output data with its index aligned
       end
     end
     else if(done == 0 && readin_ok == 1) begin
@@ -175,7 +186,6 @@ always @(posedge clk or posedge reset) begin
       wr_index <= 0;
       wr_len <= 2;
       full_out <= 0;
-
     end
   end
   else begin
@@ -186,6 +196,12 @@ end
 always @(posedge clk) begin
   zeta_k_1 <= k;
   zeta_k_2 <= zeta_k_1;
+  
+  out_index_t_1 <= wr_index;
+  out_index_t_2 <= out_index_t_1;
+
+  valid_out_t_2 <= valid_out_t_1;
+  valid_out <= valid_out_t_2;
 end
 
 // RAM
@@ -234,11 +250,11 @@ always @(posedge clk) begin
     end
     // readout
     else if(done == 1 && readout == 1)begin
-      ram2_addr_1 <= out_index + 1;
-      ram2_addr_2 <= out_index + 0;
+      ram2_addr_1 <= wr_index + 1; // why the heck is the address reversed???
+      ram2_addr_2 <= wr_index + 0;
       invntt_dout_1 <= ram2_dout_1;
       invntt_dout_2 <= ram2_dout_2;
-      out_index <= (wr_index - 'sd4);
+      out_index <= out_index_t_2;//(wr_index - 'sd4);
     end
   end
 end

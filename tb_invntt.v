@@ -80,9 +80,6 @@ always @(posedge clk) begin
   else begin
     full_in <= 0;
   end
-  if(done) begin
-    $stop;
-  end
 end
 
 endmodule
