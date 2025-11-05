@@ -111,6 +111,7 @@ reg [DEPTH-1:0] index_a;
 reg [DEPTH-1:0] index_b;
 reg [7:0] counter;
 reg readin_ok_r;
+reg [7:0] nonce_r;
 // INTERNAL REG END ===========================//
 
 // ASSIGN BEGIN ===============================//
@@ -192,6 +193,9 @@ always @(posedge clk or posedge reset) begin
       index_b <= 0;
       counter <= 0;
     end
+    if(full_in) begin
+      nonce_r <= nonce; 
+    end
     $fwrite(fd2,"%b", shake256_full_in);
     $rewind(fd2);
     $fread(shake256_done_read, fd3, 0, 1);
@@ -209,7 +213,7 @@ always @(posedge clk or posedge reset) begin
 end
 
 // with the nonce in :>
-wire [7:0] stub_mem = (counter == 32) ? nonce : ram_a_dout_1;
+wire [7:0] stub_mem = (counter == 32) ? nonce_r : ram_a_dout_1;
 // stub logic, write the content of ram_a into a file
 always @(posedge clk) begin
   if(set & iscal /*& (~pulse)*/) begin 
