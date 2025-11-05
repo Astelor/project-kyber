@@ -8,7 +8,7 @@ module kyber_pke_enc_fsm(
   // MODULE COMMAND AND CONTROL
   output reg [7:0] input_ctrl_cmd,
   input [7:0]      input_ctrl_status,
-  
+
   output reg [7:0] hash_ctrl_cmd,
   input [7:0]      hash_ctrl_status,
 
@@ -20,15 +20,48 @@ module kyber_pke_enc_fsm(
 
   output reg [7:0] polyvec_ctrl_cmd,
   input [7:0]      polyvec_ctrl_status,
+
+  output reg [7:0] invntt_ctrl_cmd,
+  input [7:0]      invntt_ctrl_status,
+
+  output reg [7:0] decomp_ctrl_cmd,
+  input [7:0]      decomp_ctrl_status,
+
+  output reg [7:0] matrix_hash_ctrl_cmd,
+  input [7:0]      matrix_hash_ctrl_status,
+  
+  // output reg [7:0] mem1_ctrl_cmd,
+  // input [7:0]      mem1_ctrl_status,
+
+  output reg [7:0] accu2_ctrl_cmd,
+  input [7:0]      accu2_ctrl_status,
   // OUTPUT =======
   // -- OUTSIDE
   output reg done // to outside
 );
 
-localparam IDLE        = 1;
-localparam HASH_CBD    = 2; 
-localparam STAGE       = 3;
-localparam POLYVEC_EKT = 4;
+localparam IDLE             =  1;
+
+localparam HASH_CBD         =  2;
+
+localparam STAGE_0          =  3;
+localparam POLYVEC_EKT      =  4;
+localparam STAGE_1          =  5;
+localparam MESSAGE          =  6;
+localparam STAGE_2          =  7;
+localparam SEED             =  8;
+localparam STAGE_3          =  9;
+
+localparam HASH_CBD_2_STAGE = 10;
+localparam HASH_CBD_2       = 11;
+
+localparam CBD_E2_STAGE     = 12;
+localparam CBD_E2           = 13;
+
+localparam E2_MEM_STAGE     = 14;
+localparam E2_MEM           = 15;
+
+// localparam  = ;
 
 reg [7:0] curr_state;
 reg [7:0] next_state;
@@ -45,8 +78,8 @@ always @(*) begin
   if(set) begin
     case (curr_state)
       IDLE : begin
-        if( (hash_ctrl_status  == 8'h0 ) & 
-            (cbd_ctrl_status   == 8'h0 ) & 
+        if( (hash_ctrl_status  == 8'h0 ) &
+            (cbd_ctrl_status   == 8'h0 ) &
             (input_ctrl_status == 8'h0 )) // input ok
           next_state = HASH_CBD;
         else
@@ -54,18 +87,75 @@ always @(*) begin
       end
       HASH_CBD : begin
         if(input_ctrl_status == 8'h3) // input done
-          next_state = STAGE;
+          next_state = STAGE_0;
         else
           next_state = HASH_CBD;
       end
-      STAGE : begin
+      STAGE_0 : begin
         if(input_ctrl_status == 4'h0)
           next_state = POLYVEC_EKT;
         else
-          next_state = STAGE;
+          next_state = STAGE_0;
       end
       POLYVEC_EKT : begin
-        next_state = POLYVEC_EKT;
+        if(input_ctrl_status == 8'h13) // ekt_input_done
+          next_state = STAGE_1;
+        else
+          next_state = POLYVEC_EKT;
+      end
+      STAGE_1 : begin
+        if(input_ctrl_status == 8'h0) // what the hell is this for??
+          next_state = MESSAGE;
+        else
+          next_state = STAGE_1;
+      end
+      MESSAGE : begin // message -> upscale -> buffer
+        if(input_ctrl_status == 8'h23) // msg_input_done
+          next_state = STAGE_2;
+        else
+          next_state = MESSAGE;
+      end
+      STAGE_2 : begin
+        if(input_ctrl_status == 8'h0) // input done, input back to init
+          next_state = SEED;
+        else
+          next_state = STAGE_2;
+      end
+      SEED : begin // seed -> matrix hash stub
+        if(input_ctrl_status == 8'h33) // seed_input_done
+          next_state = STAGE_3;
+        else
+          next_state = SEED;
+      end
+      STAGE_3 : begin // wait for hash_stub to complete sequence 1
+        if(hash_ctrl_status == 8'h10)
+          next_state = HASH_CBD_2_STAGE;
+        else
+          next_state = STAGE_3;
+      end
+      HASH_CBD_2_STAGE : begin // wait for hash_stub to reinitialize
+        if(hash_ctrl_status == 8'h0)
+          next_state = HASH_CBD_2;
+        else
+          next_state = HASH_CBD_2_STAGE;
+      end
+      HASH_CBD_2 : begin // wait for cbd to complete sequence 1 (hash command 2)
+        if(cbd_ctrl_status == 8'h10)
+          next_state = CBD_E2_STAGE;
+        else
+          next_state = HASH_CBD_2;
+      end
+      CBD_E2_STAGE : begin // reset cbd from sequence 1 (cbd command 0)
+        next_state = CBD_E2;
+      end
+      CBD_E2 : begin // (cbd command 2)
+        next_state = CBD_E2;
+      end
+      E2_MEM_STAGE : begin
+        next_state = E2_MEM_STAGE;
+      end
+      E2_MEM : begin
+        next_state = E2_MEM;
       end
       default:
         $display("forbidden state");
@@ -81,6 +171,10 @@ always @(*) begin
     cbd_cmd(0);
     ntt_cmd(0);
     polyvec_cmd(0);
+    invntt_cmd(0);
+    decomp_cmd(0);
+    accu2_cmd(0);
+
     done = 0;
   end
   else if(set) begin
@@ -91,6 +185,10 @@ always @(*) begin
         cbd_cmd(0);
         ntt_cmd(0);
         polyvec_cmd(0);
+        invntt_cmd(0);
+        decomp_cmd(0);
+        accu2_cmd(0);
+        matrix_hash_cmd(0);
 
       end
       HASH_CBD : begin
@@ -99,15 +197,54 @@ always @(*) begin
         cbd_cmd(1);
         ntt_cmd(1);
         polyvec_cmd(1);
+        invntt_cmd(1);
+
       end
-      STAGE : begin 
+      // INPUT ==============
+      STAGE_0 : begin
         // when hash finished the output (check status), call for the next input
         input_cmd(0); // reset the input fsm
       end
       POLYVEC_EKT : begin
-        input_cmd(2); 
+        input_cmd(2);
       end
-
+      STAGE_1 : begin
+        input_cmd(0);
+      end
+      MESSAGE : begin
+        input_cmd(3);
+      end
+      STAGE_2 : begin
+        input_cmd(0);
+        decomp_cmd(1);
+        accu2_cmd(1);
+      end
+      SEED : begin
+        input_cmd(4);
+        matrix_hash_cmd(1);
+      end
+      STAGE_3 : begin
+        input_cmd(0);
+      end
+      // MORE COMMAND =======
+      HASH_CBD_2_STAGE : begin
+        hash_cmd(0);
+      end
+      HASH_CBD_2 : begin // for e2 (to be added with upscaled message)
+        hash_cmd(2);
+      end
+      CBD_E2_STAGE : begin
+        cbd_cmd(0);
+      end
+      CBD_E2 : begin
+        cbd_cmd(2);
+      end
+      E2_MEM_STAGE : begin
+        // accu2();
+      end
+      E2_MEM : begin
+        // accu2();
+      end
     endcase
   end
 end
@@ -141,6 +278,37 @@ begin
   polyvec_ctrl_cmd = cmd;
 end
 endtask
+
+task invntt_cmd(input [7:0] cmd);
+begin
+  invntt_ctrl_cmd = cmd;
+end
+endtask
+
+task decomp_cmd(input [7:0] cmd);
+begin
+  decomp_ctrl_cmd = cmd;
+end
+endtask
+
+task matrix_hash_cmd(input [7:0] cmd);
+begin
+  matrix_hash_ctrl_cmd = cmd;
+end
+endtask
+
+// task mem1_cmd(input [7:0] cmd);
+// begin
+//   mem1_ctrl_cmd = cmd;
+// end
+// endtask
+
+task accu2_cmd(input [7:0] cmd);
+begin
+  accu2_ctrl_cmd = cmd;
+end
+endtask
+
 endmodule
 
 // INPUT FSM
@@ -154,24 +322,36 @@ module kyber_pke_enc_input_fsm(
   output reg [3:0] input_type,
 
   input [7:0] hash_ctrl_status,
-
+  input [7:0] polyvec_ctrl_status,
+  input [7:0] decomp_ctrl_status,
+  input [7:0] matrix_hash_ctrl_status,
   input [7:0] input_ctrl_cmd,
   output reg [7:0] input_ctrl_status
 );
 
-localparam IDLE               = 1;
-localparam CHOOSE             = 2;
-localparam HASH_INPUT_STAGE   = 3;
-localparam HASH_INPUT_READY   = 4; // pulse
-localparam HASH_INPUT_ACTIVE  = 5;
-localparam HASH_INPUT_DONE    = 6;
+localparam IDLE               =  1;
+localparam CHOOSE             =  2;
+localparam HASH_INPUT_STAGE   =  3;
+localparam HASH_INPUT_READY   =  4; // pulse
+localparam HASH_INPUT_ACTIVE  =  5;
+localparam HASH_INPUT_DONE    =  6;
 
 localparam EKT_INPUT_STAGE    = 11;
 localparam EKT_INPUT_READY    = 12; // pulse
 localparam EKT_INPUT_ACTIVE   = 13;
 localparam EKT_INPUT_DONE     = 14;
+
+localparam MSG_INPUT_STAGE    = 21;
+localparam MSG_INPUT_READY    = 22; // pulse
+localparam MSG_INPUT_ACTIVE   = 23;
+localparam MSG_INPUT_DONE     = 24;
 // i don't think it needs a handshake? it's indexed
 
+// SEED for the public key matrix generation
+localparam SEED_INPUT_STAGE   = 31;
+localparam SEED_INPUT_READY   = 32; // pulse
+localparam SEED_INPUT_ACTIVE  = 33;
+localparam SEED_INPUT_DONE    = 34;
 
 reg [7:0] curr_state;
 reg [7:0] next_state;
@@ -185,7 +365,7 @@ always @(posedge clk or posedge reset) begin
   end
 end
 
-// INPUT CONTROL NEXT STATE 
+// INPUT CONTROL NEXT STATE
 always @(*) begin
   if(set) begin
     case (curr_state)
@@ -200,10 +380,12 @@ always @(*) begin
           0 : next_state = CHOOSE;
           1 : next_state = HASH_INPUT_STAGE;
           2 : next_state = EKT_INPUT_STAGE;
-          default: next_state = CHOOSE; 
+          3 : next_state = MSG_INPUT_STAGE;
+          4 : next_state = SEED_INPUT_STAGE;
+          default: next_state = CHOOSE;
         endcase
       end
-      // HASH =====
+      // HASH =========================
       HASH_INPUT_STAGE : begin
         if(hash_ctrl_status == 8'h1)
           next_state = HASH_INPUT_READY;
@@ -214,7 +396,7 @@ always @(*) begin
         next_state = HASH_INPUT_ACTIVE;
       end
       HASH_INPUT_ACTIVE : begin
-        if(full_in) 
+        if(full_in)
           next_state = HASH_INPUT_DONE;
         else
           next_state = HASH_INPUT_ACTIVE;
@@ -225,27 +407,79 @@ always @(*) begin
         else
           next_state = HASH_INPUT_DONE;
       end
-      // EKT ======
+      // EKT ==========================
       EKT_INPUT_STAGE : begin
-        // if() 
+        // if()
         // there's no conflict here,
-        // so I think polyvec doesn't need an explicit flag 
+        // so I think polyvec doesn't need an explicit flag
         // to signal the input fsm
+        // TODO: so does it need one?
         next_state = EKT_INPUT_READY;
       end
       EKT_INPUT_READY : begin
         next_state = EKT_INPUT_ACTIVE;
       end
       EKT_INPUT_ACTIVE :begin
-        next_state = EKT_INPUT_ACTIVE;
+        if(polyvec_ctrl_status == 2)           
+          next_state = EKT_INPUT_DONE;
+        else
+          next_state = EKT_INPUT_ACTIVE;
       end
       EKT_INPUT_DONE : begin
         // do I need to have polyvec do a status code??
         // or can I just have it use the ful_in signal?
         // it's a bit redundant to give polyvec two concurrent fsms
         // simply for the use of two inputs
-        // or is it necessary? 
-        next_state = EKT_INPUT_DONE;
+        // or is it necessary?
+        if(input_ctrl_cmd == 0)
+          next_state = IDLE; // ?
+        else
+          next_state = EKT_INPUT_DONE;
+      end
+      // MESSAGE ======================
+      MSG_INPUT_STAGE : begin
+        // no conflict here :)
+        if(decomp_ctrl_status == 1) // INPUT
+          next_state = MSG_INPUT_READY;
+        else
+          next_state = MSG_INPUT_STAGE;
+      end
+      MSG_INPUT_READY : begin
+        next_state = MSG_INPUT_ACTIVE;
+      end
+      MSG_INPUT_ACTIVE : begin
+        if(decomp_ctrl_status == 2) // OUTPUT STAGE
+          next_state = MSG_INPUT_DONE;
+        else
+          next_state = MSG_INPUT_ACTIVE;
+      end
+      MSG_INPUT_DONE : begin
+        if(input_ctrl_cmd == 0)
+          next_state = IDLE;
+        else
+          next_state = MSG_INPUT_DONE;
+      end
+      // SEED =========================
+      SEED_INPUT_STAGE : begin
+        if(matrix_hash_ctrl_status == 1)
+          next_state = SEED_INPUT_READY;
+        else
+          next_state = SEED_INPUT_STAGE;
+      end
+      SEED_INPUT_READY : begin
+        next_state = SEED_INPUT_ACTIVE;
+      end
+      SEED_INPUT_ACTIVE : begin
+        if(full_in)
+          next_state = SEED_INPUT_DONE;
+        else
+          next_state = SEED_INPUT_ACTIVE;
+      end
+      SEED_INPUT_DONE : begin
+        if(input_ctrl_cmd == 0)
+          next_state = IDLE;
+        else
+          next_state = SEED_INPUT_DONE;
       end
       default:
         $display("forbidden state");
@@ -297,6 +531,36 @@ always @(*) begin
       EKT_INPUT_DONE : begin
         status(8'h13);
       end
+      // MSG ================
+      MSG_INPUT_STAGE : begin
+        status(8'h21);
+        type(3);
+      end
+      MSG_INPUT_READY : begin
+        readin_ok_fsm = 1; // pulse high
+      end
+      MSG_INPUT_ACTIVE : begin
+        status(8'h22);
+        readin_ok_fsm = 0; // pulse low
+      end
+      MSG_INPUT_DONE : begin
+        status(8'h23);
+      end
+      // SEED ===============
+      SEED_INPUT_STAGE : begin
+        status(8'h31);
+        type(4);
+      end
+      SEED_INPUT_READY : begin
+        readin_ok_fsm = 1; // pulse high
+      end
+      SEED_INPUT_ACTIVE : begin
+        status(8'h32);
+        readin_ok_fsm = 0; // pulse low
+      end
+      SEED_INPUT_DONE : begin
+        status(8'h33);
+      end
     endcase
   end
 end
@@ -331,7 +595,7 @@ module kyber_pke_enc_hash_fsm(
   output reg hash_s_set,
   output reg hash_s_full_in,
   output reg hash_s_readin,
-  output reg hash_readout,
+  output reg hash_s_readout,
   // output reg [3:0] hash_type,
   output reg counter_ctrl,
   input [7:0] counter,
@@ -354,11 +618,13 @@ localparam OUTPUT        = 7;
 localparam OUTPUT_DONE   = 8;
 localparam SEQUENCE_DONE = 9;
 
+localparam CHOOSE        = 10;
+
 reg [7:0] curr_state;
 reg [7:0] next_state;
 
 reg [3:0] seq; // internal sequence
-
+reg [3:0] seq_type;
 // NEXT STATE
 always @(posedge clk or posedge reset) begin
   if (reset) begin
@@ -374,14 +640,31 @@ always @(*) begin
   if(set) begin
     case (curr_state)
       IDLE : begin
-        if(hash_readin_ok) //wait until the module initilize
-          next_state = READY_INPUT;
+        if(hash_readin_ok /*& (hash_ctrl_cmd == 8'h0)*/)
+          // wait until the module re-initilize
+          next_state = CHOOSE;
         else
           next_state = IDLE;
       end
+      CHOOSE : begin // sequence type chooser
+        case (hash_ctrl_cmd)
+          8'h1 : begin
+            next_state = READY_INPUT;
+          end
+          8'h2 : begin
+            next_state = START_CAL;
+          end
+          8'h3 : begin
+            next_state = START_CAL; // for error1
+          end
+          default: begin
+            next_state = CHOOSE;
+          end
+        endcase
+      end
       READY_INPUT : begin
-        if((input_ctrl_status == 8'h1) &
-           (hash_ctrl_cmd     == 8'h1)) // do input please
+        if((input_ctrl_status == 8'h1) //&
+           /*(hash_ctrl_cmd     == 8'h1)*/) // do input please
           next_state = INPUT;
         else
           next_state = READY_INPUT;
@@ -410,21 +693,47 @@ always @(*) begin
       OUTPUT : begin
         if(counter == 16)
           next_state = OUTPUT_DONE;
-        else 
+        else
           next_state = OUTPUT;
       end
       OUTPUT_DONE : begin
-        if(seq >= 3) begin
-          next_state = SEQUENCE_DONE;
-        end
-        else if(hash_ctrl_cmd == 1)
-          next_state = START_CAL;
-        else
-          next_state = OUTPUT_DONE;
+        case (seq_type)
+          8'h1 : begin
+            if(seq >= 3) 
+              next_state = SEQUENCE_DONE;            
+            else
+              next_state = START_CAL;
+          end
+          8'h2 : begin
+            next_state = SEQUENCE_DONE;            
+          end
+          8'h3 : begin
+            if(seq >= 3)
+              next_state = SEQUENCE_DONE;
+            else
+              next_state = START_CAL;
+          end
+          default: begin
+            next_state = OUTPUT_DONE;
+          end 
+        endcase
       end
       SEQUENCE_DONE : begin
-        next_state = SEQUENCE_DONE;
+        // waits for the command to return to 0
+        if(hash_ctrl_cmd == 8'h0)
+          next_state = IDLE;
+        else
+          next_state = SEQUENCE_DONE;
       end
+      // SEQUENCE_DONE_2 : begin
+      //   next_state = CHOOSE;
+      // end
+      // SEQUENCE_DONE_3 : begin
+      //   if(hash_ctrl_cmd == 0)
+      //     next_state = IDLE; 
+      //   else
+      //     next_state = SEQUENCE_DONE_3;
+      // end
       default:
         $display("forbidden state");
     endcase
@@ -439,11 +748,12 @@ always @(*) begin
     hash_s_set     = 0;
     hash_s_full_in = 0;
     hash_s_readin  = 0;
-    hash_readout   = 0;
+    hash_s_readout   = 0;
     // hash_type   = 0;
     counter_ctrl   = 0;
-    
+
     seq = 0;
+    seq_type = 0;
   end
   else if(set) begin
     case (curr_state)
@@ -452,6 +762,15 @@ always @(*) begin
         hash_s_set = 1; // readin_ok flag is behind a set flag bruhhhh
         hash_s_full_in = 0;
         hash_s_readin = 0;
+        seq = 0;
+      end
+      CHOOSE : begin
+        // shares status with IDLE?
+        case (hash_ctrl_cmd)
+          8'h1 : seq_type = 1;
+          8'h2 : seq_type = 2;
+          8'h3 : seq_type = 3;
+        endcase
       end
       READY_INPUT : begin
         status(1);
@@ -474,12 +793,12 @@ always @(*) begin
       end
       OUTPUT : begin
         status(5);
-        hash_readout = 1;
+        hash_s_readout = 1;
         counter_ctrl = 1;
       end
       OUTPUT_DONE : begin
         status(6);
-        hash_readout = 0;
+        hash_s_readout = 0;
         counter_ctrl = 0;
       end
       SEQUENCE_DONE : begin
@@ -514,12 +833,15 @@ module kyber_pke_enc_cbd_fsm(
   output reg cbd_s_readin,
   output reg cbd_readout,
 
-  input [7:0] counter, // 0~255
   output reg counter_ctrl,
+  input [7:0] counter, // 0~255
+  output reg cbd_s_cal_pulse,
+  output [3:0] cbd_type, // 1 goes to ntt, 2 goes to memory 
 
   // BIG CONTROL
   input [7:0] ntt_ctrl_status,
   input [7:0] hash_ctrl_status,
+  input [7:0] accu2_ctrl_status,
   input [7:0] cbd_ctrl_cmd,
   output reg [7:0] cbd_ctrl_status
 );
@@ -534,10 +856,15 @@ localparam OUTPUT        = 7;
 localparam OUTPUT_DONE   = 8;
 localparam SEQUENCE_DONE = 9;
 
+localparam CHOOSE        = 10;
+
 reg [7:0] curr_state;
 reg [7:0] next_state;
 
 reg [3:0] seq; // internal sequence
+reg [3:0] seq_type;
+
+assign cbd_type = seq_type;
 
 always @(posedge clk or posedge reset) begin
   if (reset) begin
@@ -553,19 +880,26 @@ always @(*) begin
     case (curr_state)
       IDLE : begin
         if(cbd_ok_in)
-          next_state = READY_INPUT;
+          next_state = CHOOSE;
         else
           next_state = IDLE;
       end
+      CHOOSE : begin
+        case (cbd_ctrl_cmd)
+          8'h1 : next_state = READY_INPUT; // y
+          8'h2 : next_state = READY_INPUT; // e2
+          8'h3 : next_state = READY_INPUT; // e1
+          default: next_state = CHOOSE;
+        endcase
+      end
       READY_INPUT : begin
-        if((hash_ctrl_status == 8'h5) & 
-           (cbd_ctrl_cmd     == 8'h1)) // hash output ready
+        if(hash_ctrl_status == 8'h5) // hash output ready
           next_state = INPUT;
         else
           next_state = READY_INPUT;
       end
       INPUT : begin
-        if(hash_ctrl_status == 8'h6) // hash output is done 
+        if(hash_ctrl_status == 8'h6) // hash output is done
           next_state = START_CAL;
         else
           next_state = INPUT;
@@ -580,11 +914,24 @@ always @(*) begin
           next_state = CALCULATE;
       end
       OUTPUT_READY : begin
-        if((ntt_ctrl_status == 8'h1) //||
-           )//(ntt_ctrl_status == 8'h6) ) // NTT output ready
-          next_state = OUTPUT;
-        else
-          next_state = OUTPUT_READY;
+        case(seq_type)
+          8'h1 : begin // y
+            if(ntt_ctrl_status == 8'h1) // NTT input ready
+              next_state = OUTPUT;
+            else
+              next_state = OUTPUT_READY;
+          end
+          8'h2 : begin // e2
+            // TODO: to where?
+            if(accu2_ctrl_status == 4) // E2_READY
+              next_state = OUTPUT;
+            else
+              next_state = OUTPUT_READY;
+          end
+          8'h3 : begin // e1
+            next_state = OUTPUT_READY;
+          end
+        endcase
       end
       OUTPUT : begin
         if(cbd_ok_out == 0) // can be the counter too :>
@@ -593,16 +940,32 @@ always @(*) begin
           next_state = OUTPUT;
       end
       OUTPUT_DONE : begin
-        if(seq >= 3) begin
-          next_state = SEQUENCE_DONE;
-        end
-        else if(cbd_ctrl_cmd == 1)
-          next_state = IDLE;
-        else
-          next_state = OUTPUT_DONE;
+        case (seq_type)
+          8'h1 : begin // y
+            if(seq >= 3)
+              next_state = SEQUENCE_DONE;
+            else
+              next_state = READY_INPUT;
+          end
+          8'h2 : begin // e2
+            next_state = SEQUENCE_DONE;
+          end
+          8'h3 : begin // e1
+            if(seq >= 3)
+              next_state = SEQUENCE_DONE;
+            else
+              next_state = READY_INPUT;
+          end
+          default: begin
+            next_state = OUTPUT_DONE;
+          end 
+        endcase
       end
       SEQUENCE_DONE : begin
-        next_state = SEQUENCE_DONE;
+        if(cbd_ctrl_cmd == 0) // wait for BIG control to acknowledge this (by resetting it with commnad 0)
+          next_state = IDLE;
+        else
+          next_state = SEQUENCE_DONE;
       end
       default:
         $display("forbidden state");
@@ -614,17 +977,25 @@ end
 always @(*) begin
   if(reset) begin
     status(0);
-    cbd_s_set    = 0;
-    cbd_s_readin = 0;
-    cbd_readout  = 0;
-    counter_ctrl = 0;
-    seq          = 0;
+    cbd_s_set        = 0;
+    cbd_s_readin     = 0;
+    cbd_readout      = 0;
+    counter_ctrl     = 0;
+    cbd_s_cal_pulse  = 0;
+    seq              = 0;
+    seq_type         = 0;
   end
   else if(set) begin
     case (curr_state)
       IDLE : begin
         status(0);
         cbd_s_set = 1;
+      end
+      CHOOSE : begin
+        case (cbd_ctrl_cmd)
+          8'h1 : seq_type = 1;
+          8'h2 : seq_type = 2;
+        endcase
       end
       READY_INPUT : begin
         status(1);
@@ -634,10 +1005,12 @@ always @(*) begin
         cbd_s_readin = 1;
       end
       START_CAL : begin
-        seq = seq + 1;
+        seq = seq + 1; // TODO: maybe this one needs to be in a clocked loop
+        cbd_s_cal_pulse = 1;
       end
       CALCULATE : begin
-        cbd_s_readin = 0;
+        cbd_s_readin    = 0;
+        cbd_s_cal_pulse = 0;
         status(3);
       end
       OUTPUT_READY : begin
@@ -655,6 +1028,7 @@ always @(*) begin
       end
       SEQUENCE_DONE : begin
         status(8'h10);
+        seq_type = 0;
       end
     endcase
   end
@@ -675,12 +1049,12 @@ module kyber_pke_enc_ntt_fsm(
   input reset,
   // TODO why doesn't NTT has a readin_ok? >:(
   input ntt_done,
-  
+
   output reg ntt_s_set,
   output reg ntt_s_readin,
   output reg ntt_s_cal_en, // this is like the full in thing ok
-  output reg ntt_readout,
-  
+  output reg ntt_s_readout,
+
   input [7:0] cbd_counter,
 
   output reg counter_ctrl,
@@ -725,9 +1099,9 @@ always @(*) begin
       IDLE : begin
         if(ntt_done == 1) // ntt init'd
           next_state = READY_INPUT;
-        else 
+        else
           next_state = IDLE;
-      end 
+      end
       READY_INPUT : begin
         if((cbd_ctrl_status == 8'h4) &
            (ntt_ctrl_cmd    == 8'h1)   ) // cbd output ready
@@ -766,18 +1140,18 @@ always @(*) begin
         if(seq >= 3) begin
           next_state = SEQUENCE_DONE;
         end
-        else if(ntt_ctrl_cmd == 1)
+        // else if(ntt_ctrl_cmd == 1)
           // TODO: this should include a condition that finish the sequence
-          next_state = IDLE;
         else
-          next_state = OUTPUT_DONE;
+          next_state = IDLE;
+          // next_state = OUTPUT_DONE;
       end
       SEQUENCE_DONE : begin
         next_state = SEQUENCE_DONE;
       end
       default: begin
         $display("forbidden state");
-      end 
+      end
     endcase
   end
 end
@@ -788,7 +1162,7 @@ always @(*) begin
     ntt_s_set    = 0;
     ntt_s_readin = 0;
     ntt_s_cal_en = 0;
-    ntt_readout  = 0;
+    ntt_s_readout  = 0;
     counter_ctrl = 0;
     seq          = 0;
   end
@@ -797,7 +1171,7 @@ always @(*) begin
       IDLE : begin
         status(0);
         ntt_s_set = 1;
-      end 
+      end
       READY_INPUT : begin
         status(1);
       end
@@ -819,16 +1193,17 @@ always @(*) begin
       end
       OUTPUT : begin
         status(5);
-        ntt_readout  = 1;
+        ntt_s_readout  = 1;
         counter_ctrl = 1;
       end
       OUTPUT_DONE : begin
         status(6);
-        ntt_readout  = 0;
+        ntt_s_readout  = 0;
         counter_ctrl = 0;
       end
       SEQUENCE_DONE : begin
         status(8'h10);
+		  // ntt_s_set = 0;
       end
     endcase
   end
@@ -856,7 +1231,7 @@ module kyber_pke_enc_polyvec_fsm(
 
   // OUTPUT
   output reg polyvec_s_set,
-  output reg polyvec_readout,
+  output reg polyvec_s_readout,
   output reg polyvec_s_cal_en,
 
   output reg polyvec_s_readin_a,
@@ -864,15 +1239,20 @@ module kyber_pke_enc_polyvec_fsm(
   output reg polyvec_full_in_a,
   output reg polyvec_full_in_b,
 
+  output reg counter_ctrl,
+  input [7:0] counter,
 
   // BIG CONTROL
   input [7:0]      ntt_ctrl_status,
+  input [7:0]      invntt_ctrl_status,
+  input [7:0]      matrix_hash_ctrl_status,
   input [7:0]      polyvec_ctrl_cmd,
   output reg [7:0] polyvec_ctrl_status
 );
 
 localparam IDLE          = 1;
 localparam READY_INPUT   = 2;
+localparam INPUT_0       = 11;
 localparam INPUT_1       = 3;
 localparam INPUT_2       = 4;
 localparam START_CAL     = 5;
@@ -908,9 +1288,15 @@ always @(*) begin
       READY_INPUT : begin
         if(/*(ntt_ctrl_status  == 8'h4) & */
            (polyvec_ctrl_cmd == 8'h1)  ) // NTT output ready
-          next_state = INPUT_1;
+          next_state = INPUT_0;
         else
           next_state = READY_INPUT;
+      end
+      INPUT_0 : begin
+        if(polyvec_readin_b_ok == 0)
+          next_state = INPUT_1;
+        else
+          next_state = INPUT_0; 
       end
       INPUT_1 : begin
         if(ntt_ctrl_status == 8'h10)
@@ -919,7 +1305,7 @@ always @(*) begin
           next_state = INPUT_1;
       end
       INPUT_2 : begin
-        if((polyvec_readin_a_ok == 0 ) & 
+        if((polyvec_readin_a_ok == 0 ) &
            (polyvec_readin_b_ok == 0 )  ) // waits until both inputs are done
           next_state = START_CAL;
         else
@@ -935,11 +1321,17 @@ always @(*) begin
           next_state = CALCULATE;
       end
       OUTPUT_READY : begin
-        next_state = OUTPUT_READY;
+        if(invntt_ctrl_status == 1) // ready input
+          next_state = OUTPUT;
+        else
+          next_state = OUTPUT_READY;
         // should lock memory bank a immediately with full_in_a
       end
-      OUTPUT : begin
-        next_state = OUTPUT;
+      OUTPUT : begin // use a counter here
+        if(counter == 129) // TODO the polyvec output over shot by 2~3, perhaps fix?
+          next_state = OUTPUT_DONE;
+        else
+          next_state = OUTPUT;
       end
       OUTPUT_DONE : begin
         next_state = OUTPUT_DONE;
@@ -959,16 +1351,17 @@ always @(*) begin
   if(reset) begin
     status(0);
     polyvec_s_set      = 0;
-    polyvec_readout    = 0;
+    polyvec_s_readout  = 0;
     polyvec_s_cal_en   = 0;
     polyvec_s_readin_a = 0;
     polyvec_s_readin_b = 0;
     polyvec_full_in_a  = 0;
     polyvec_full_in_b  = 0;
+    counter_ctrl       = 0;
     // reset flags here
   end
   else if(set) begin
-    case(curr_state) 
+    case(curr_state)
       IDLE : begin
         status(0);
         polyvec_s_set = 1;
@@ -979,9 +1372,11 @@ always @(*) begin
         polyvec_s_readin_b = 1; // full_in where??
         polyvec_full_in_b  = 1;
       end
+      INPUT_0 : begin
+        polyvec_s_readin_a = 1;
+      end
       INPUT_1 : begin
         status(2);
-        polyvec_s_readin_a = 1;
       end
       INPUT_2 : begin
         polyvec_full_in_a = 1;
@@ -1000,12 +1395,17 @@ always @(*) begin
       end
       OUTPUT : begin
         status(5);
+        polyvec_s_readout = 1;
+        counter_ctrl = 1;
       end
       OUTPUT_DONE : begin
         status(6);
+        polyvec_s_readout = 0;
+        counter_ctrl = 0;
       end
       SEQUENCE_DONE : begin
         status(8'h10);
+		  // polyvec_s_set = 0;
         // polyvec_full_in_a = 1;
       end
     endcase
@@ -1017,4 +1417,755 @@ begin
   polyvec_ctrl_status = st;
 end
 endtask
+endmodule
+
+
+// INVNTT FSM
+module kyber_pke_enc_invntt_fsm(
+  input clk,
+  input set,
+  input reset,
+
+  // INPUT
+  input invntt_readin_ok,
+  input invntt_done,
+
+  // OUTPUT
+  output reg invntt_s_set,
+  output reg invntt_s_readin,
+  output reg invntt_s_readout,
+  output reg invntt_s_cal_en,
+  output reg invntt_s_full_in,
+
+  input [7:0] polyvec_ctrl_status,
+  input [7:0] accu2_ctrl_status,
+  input [7:0] invntt_ctrl_cmd,
+  output reg [7:0] invntt_ctrl_status
+);
+
+localparam IDLE          = 1;
+localparam READY_INPUT   = 2;
+localparam INPUT         = 3;
+localparam START_CAL     = 4;
+localparam START_CAL_2   = 10; // because of full_in
+localparam CALCULATE     = 5;
+localparam OUTPUT_READY  = 6;
+localparam OUTPUT        = 7;
+localparam OUTPUT_DONE   = 8;
+localparam SEQUENCE_DONE = 9;
+
+reg [7:0] curr_state;
+reg [7:0] next_state;
+
+always @(posedge clk or posedge reset) begin
+  if(reset) begin
+    curr_state <= IDLE;
+  end
+  else if (set) begin
+    curr_state <= next_state;
+  end
+end
+
+// INVNTT NEXT STATE
+always @(*) begin
+  if(set) begin
+    case(curr_state)
+      IDLE : begin
+        if(invntt_readin_ok) // module init successfull
+          next_state = READY_INPUT;
+        else
+          next_state = IDLE;
+      end
+      READY_INPUT : begin
+        if((polyvec_ctrl_status == 8'h4) &
+           (invntt_ctrl_cmd     == 8'h1)  )
+          next_state = INPUT;
+        else
+          next_state = READY_INPUT;
+      end
+      INPUT : begin // status who and what? counter?
+        if(polyvec_ctrl_status == 8'h6) // output done
+          next_state = START_CAL;
+        else
+          next_state = INPUT;
+      end
+      START_CAL : begin
+        next_state = START_CAL_2;
+      end
+      START_CAL_2 : begin
+        next_state = CALCULATE;
+      end
+      CALCULATE : begin
+        if(invntt_done)
+          next_state = OUTPUT_READY;
+        else
+          next_state = CALCULATE;
+      end
+      OUTPUT_READY : begin // spear it with the next module
+        if(accu2_ctrl_status == 7) // accu2 ready
+          next_state = OUTPUT;
+        else
+          next_state = OUTPUT_READY;
+      end
+      OUTPUT : begin
+        if(invntt_readin_ok == 1) // output done
+          next_state = OUTPUT_DONE;
+        else
+          next_state = OUTPUT;
+      end
+      OUTPUT_DONE : begin
+        // if(accu2_ctrl_status == 4) // e2 ready
+          next_state = SEQUENCE_DONE;
+        // else
+          // next_state = OUTPUT_DONE;
+      end
+      SEQUENCE_DONE : begin
+        next_state = SEQUENCE_DONE;
+      end
+      default: begin
+        $display("forbidden state");
+      end
+    endcase
+  end
+end
+
+// INVNTT FLAG
+always @(*) begin
+  if(reset) begin
+    // reset flags here
+    status(0);
+    invntt_s_set     = 0;
+    invntt_s_readin  = 0;
+    invntt_s_readout = 0;
+    invntt_s_cal_en  = 0;
+    invntt_s_full_in = 0;
+  end
+  else if(set) begin
+    case(curr_state)
+      IDLE : begin
+        // flags go here
+        status(0);
+        invntt_s_set = 1;
+      end
+      READY_INPUT : begin
+        status(1);
+      end
+      INPUT : begin
+        status(2);
+        invntt_s_readin = 1;
+      end
+      START_CAL : begin
+        invntt_s_readin  = 0;
+        invntt_s_full_in = 1;
+      end
+      START_CAL_2 : begin
+        invntt_s_cal_en  = 1;
+        invntt_s_full_in = 0;
+      end
+      CALCULATE : begin
+        status(3);
+        invntt_s_cal_en  = 0;
+      end
+      OUTPUT_READY : begin
+        status(4);
+      end
+      OUTPUT : begin
+        status(5);
+        invntt_s_readout = 1;
+      end
+      OUTPUT_DONE : begin
+        status(6);
+        invntt_s_readout = 0;
+      end
+      SEQUENCE_DONE : begin
+        status(8'h10);
+      end
+    endcase
+  end
+end
+
+task status(input [7:0] st);
+begin
+  invntt_ctrl_status = st;
+end
+endtask
+
+endmodule
+
+// I don't think this is necessary, we might need a dedicated control
+// for the sequence of adding the polynomials together
+// DECOMP FSM
+module kyber_pke_enc_decomp_fsm(
+  input clk,
+  input set,
+  input reset,
+  
+  // INPUT
+  input decomp_readin_ok,
+  input decomp_readout_ok,
+  // OUTPUT 
+  output reg decomp_s_set,
+  output reg decomp_s_readin,
+  output reg decomp_s_readout,
+  // output reg decomp_s_full_in, // TODO: this signal is not used
+
+  input [7:0] input_ctrl_status,
+  input [7:0] accu2_ctrl_status,
+  input [7:0] decomp_ctrl_cmd,
+  output reg [7:0] decomp_ctrl_status
+);
+
+localparam IDLE          = 1;
+// localparam READY_INPUT   = 2;
+localparam INPUT         = 3;
+// localparam START_CAL     = 4;
+// localparam CALCULATE     = 5;
+localparam OUTPUT_STAGE  = 10;
+localparam OUTPUT_READY  = 6;
+localparam OUTPUT        = 7;
+localparam OUTPUT_DONE   = 8;
+// localparam SEQUENCE_DONE = 9;
+
+reg [7:0] curr_state;
+reg [7:0] next_state;
+always @(posedge clk or posedge reset) begin
+  if(reset) begin
+    curr_state <= IDLE;
+  end
+  else if (set) begin
+    curr_state <= next_state;
+  end
+end
+// DECOMP NEXT STATE
+always @(*) begin
+  if(set) begin
+    case(curr_state)
+      IDLE : begin
+        if(input_ctrl_status == 8'h21)
+          next_state = INPUT;
+        else
+          next_state = IDLE;
+      end
+      INPUT : begin
+        if(decomp_readout_ok)
+          next_state = OUTPUT_STAGE;
+        else
+          next_state = INPUT;
+      end
+      OUTPUT_STAGE : begin
+        if(decomp_ctrl_cmd == 1)
+          next_state = OUTPUT_READY;
+        else
+          next_state = OUTPUT_STAGE;
+      end
+      OUTPUT_READY : begin
+        if(accu2_ctrl_status == 1)
+          next_state = OUTPUT;
+        else
+          next_state = OUTPUT_READY;
+      end
+      OUTPUT : begin
+        if(decomp_readout_ok == 0)
+          next_state = OUTPUT_DONE;
+        else
+          next_state = OUTPUT;
+      end
+      OUTPUT_DONE : begin
+        next_state = OUTPUT_DONE;
+      end
+      default: begin
+        $display("decomp: forbidden state");
+      end
+    endcase
+  end
+end
+// DECOMP FLAG
+always @(*) begin
+  if(reset) begin
+    status(0);
+    decomp_s_set     = 0;
+    decomp_s_readin  = 0;
+    decomp_s_readout = 0;
+  end
+  else if(set) begin
+    case(curr_state) 
+      IDLE : begin
+        status(0);
+        decomp_s_set = 1;
+      end
+      INPUT : begin
+        status(1);
+        decomp_s_readin = 1;
+      end
+      OUTPUT_STAGE : begin
+        status(2);
+      end
+      OUTPUT_READY : begin
+        status(3);
+        decomp_s_readin = 0;
+      end
+      OUTPUT : begin
+        status(4);
+        decomp_s_readout = 1;
+      end
+      OUTPUT_DONE : begin
+        status(5);
+        decomp_s_readout = 0;
+      end
+    endcase
+  end
+end
+
+task status(input [7:0] st);
+begin
+  decomp_ctrl_status = st;
+end
+endtask
+
+endmodule
+
+// MEMORY 2 FSM, TODO: do I change the name to accumulator?
+module kyber_pke_enc_accu2_fsm(
+  input clk,
+  input set,
+  input reset,
+
+  input [3:0] accu2_status,
+
+  output reg [3:0] accu2_s_cmd, // used to determine what goes where in the main module
+  output reg accu2_s_readin,
+  output reg accu2_s_readout,
+  output reg [3:0] accu2_s_type,
+
+  input [3:0] cbd_type,
+  input [7:0] cbd_counter,
+
+  input [7:0] decomp_ctrl_status,
+  input [7:0] cbd_ctrl_status,
+  input [7:0] invntt_ctrl_status,
+  input [7:0] accu2_ctrl_cmd,
+  output reg [7:0] accu2_ctrl_status
+);
+
+
+localparam IDLE          = 1;
+localparam MESSAGE_STAGE = 9;
+localparam MESSAGE_READY = 2;
+localparam MESSAGE_INPUT = 3;
+localparam STAGE_0       = 4;
+localparam E2_READY      = 5;
+localparam E2_INPUT      = 6;
+localparam STAGE_1       = 7;
+localparam E2_READY_1    = 8;
+localparam INTT_READY    = 10;
+localparam INTT_INPUT    = 11;
+localparam STAGE_2       = 12;
+
+reg [7:0] curr_state;
+reg [7:0] next_state;
+
+always @(posedge clk or posedge reset) begin
+  if(reset) begin
+    curr_state <= IDLE;
+  end
+  else if (set) begin
+    curr_state <= next_state;
+  end
+end
+
+// MEMORY 2 NEXT STATE
+always @(*) begin
+  if(set) begin
+    case(curr_state)
+      IDLE : begin
+        if(accu2_ctrl_cmd == 1)
+          next_state = MESSAGE_STAGE;
+        else
+          next_state = IDLE;
+      end
+      MESSAGE_STAGE : begin
+        if(accu2_status == 1)
+          next_state = MESSAGE_READY;
+        else
+          next_state = MESSAGE_STAGE;
+      end
+      MESSAGE_READY : begin
+        if(decomp_ctrl_status == 4) // output start
+          next_state = MESSAGE_INPUT;
+        else
+          next_state = MESSAGE_READY;
+      end
+      MESSAGE_INPUT : begin
+        if(decomp_ctrl_status == 5) // output done
+          next_state = STAGE_0;
+        else
+          next_state = MESSAGE_INPUT;
+      end
+      STAGE_0 : begin 
+        // finished message input, waiting for CBD error2
+        // TODO: look for OUTPUT_READY and cbd_type
+        if(cbd_type == 2        && // e2 is the type we want  
+           cbd_ctrl_status == 4 && // cbd output ready
+           accu2_status == 2     ) // accu2_status ready 
+          next_state = E2_READY;
+        else
+        next_state = STAGE_0;
+      end
+      E2_READY : begin
+        if(cbd_ctrl_status == 5) // cbd output
+          next_state = E2_READY_1;
+        else
+          next_state = E2_READY;
+      end
+      E2_READY_1 : begin
+        if(cbd_counter  == 3) // the start of output in cbd is not what we want
+          next_state = E2_INPUT;
+        else
+          next_state = E2_READY_1;
+      end
+      E2_INPUT : begin // input from cbd(e2) -> memory (accu2)
+        if(cbd_counter == 131)
+          next_state = STAGE_1;
+        else
+          next_state = E2_INPUT;
+      end
+      STAGE_1 : begin
+        if(invntt_ctrl_status == 4) // invntt output ready
+          next_state = INTT_READY;
+        else
+          next_state = STAGE_1;
+      end
+      INTT_READY : begin
+        if(invntt_ctrl_status == 5) // invntt output
+          next_state = INTT_INPUT;
+        else
+          next_state = INTT_READY;
+      end
+      INTT_INPUT : begin
+        if(invntt_ctrl_status == 6) // invntt output done
+          next_state = STAGE_2;
+        else
+          next_state = INTT_INPUT;
+      end
+      STAGE_2 : begin
+        next_state = STAGE_2;
+      end
+      // TODO: the next stage would to run it through compress and encode, turning it into ciphertext 2
+      default: begin
+        $display("forbidden state");
+      end
+    endcase
+  end
+end
+// MEMORY 2 FLAG
+always @(*) begin
+  if(reset) begin
+    status(0);
+    type(0);
+    readin(0);
+    readout(0);
+  end
+  else if(set) begin
+    case(curr_state) 
+      IDLE : begin
+        status(0);
+        command(0);
+        readin(0);
+        readout(0);
+      end
+      MESSAGE_STAGE : begin
+        command(1);
+      end
+      MESSAGE_READY : begin
+        status(1);
+      end
+      MESSAGE_INPUT : begin
+        status(2);
+        readin(1);
+        type(1);
+      end
+      STAGE_0 : begin
+        status(3);
+        command(2);
+        type(0);
+        readin(0);
+      end
+      E2_READY : begin
+        status(4);
+      end
+      E2_READY_1 : begin
+        // waiting...
+      end
+      E2_INPUT : begin
+        status(5);
+        type(2); // cbd
+        readin(1);
+      end
+      STAGE_1 : begin
+        status(6);
+        // command(0);
+        type(0);
+        readin(0);
+      end
+      INTT_READY : begin
+        status(7);
+      end
+      INTT_INPUT : begin
+        status(8);
+        type(3);
+        readin(1);
+      end
+      STAGE_2 : begin
+        status(9);
+        type(0);
+        readin(0);
+      end
+    endcase
+  end
+end
+
+task status(input [7:0] st);
+begin
+  accu2_ctrl_status = st;
+end
+endtask
+
+task command(input [3:0] cmd);
+begin
+  accu2_s_cmd = cmd;
+end
+endtask
+
+task type(input [3:0] tp);
+begin
+  accu2_s_type = tp;
+end
+endtask
+
+task readin(input rd);
+begin
+  accu2_s_readin = rd;
+end
+endtask
+
+task readout(input rd);
+begin
+  accu2_s_readout = rd;
+end
+endtask
+
+endmodule
+
+
+// MATRIX HASH FSM
+module kyber_pke_enc_matrix_hash_fsm(
+  input clk,
+  input set,
+  input reset,
+
+  // INPUT
+  input matrix_hash_readin_ok,
+  input matrix_hash_done,
+
+  // OUTPUT
+  output reg matrix_hash_s_set,
+  output reg matrix_hash_s_full_in,
+  output reg matrix_hash_s_readin,
+  output reg matrix_hash_s_readout,
+
+  output reg counter_ctrl,
+  input [7:0] counter,
+
+  // BIG CONTROL
+  input [7:0] input_ctrl_status,
+  input [7:0] polyvec_ctrl_status, 
+  input [7:0] matrix_hash_ctrl_cmd,
+  output reg [7:0] matrix_hash_ctrl_status
+);
+
+localparam IDLE          = 1;
+localparam READY_INPUT   = 2;
+localparam INPUT         = 3;
+localparam START_CAL     = 4;
+localparam CALCULATE     = 5;
+localparam OUTPUT_READY  = 6;
+localparam OUTPUT        = 7;
+localparam OUTPUT_DONE   = 8;
+localparam SEQUENCE_DONE = 9;
+localparam CHOOSE        = 10;
+
+reg [7:0] curr_state;
+reg [7:0] next_state;
+always @(posedge clk or posedge reset) begin
+  if(reset) begin
+    curr_state <= IDLE;
+  end
+  else if (set) begin
+    curr_state <= next_state;
+  end
+end
+
+reg [3:0] seq; // internal sequence
+reg [3:0] seq_type;
+
+// MATRIX HASH NEXT STATE
+always @(*) begin
+  if(set) begin
+    case (curr_state)
+      IDLE : begin
+        if(matrix_hash_readin_ok /*& (hash_ctrl_cmd == 8'h0)*/)
+          // wait until the module re-initilize
+          next_state = CHOOSE;
+        else
+          next_state = IDLE;
+      end
+      CHOOSE : begin // sequence type chooser
+        case (matrix_hash_ctrl_cmd)
+          8'h1 : begin // there is currently no other commands
+            next_state = READY_INPUT;
+          end
+          // 8'h2 : begin
+          //   next_state = START_CAL;
+          // end
+          // 8'h3 : begin
+          //   next_state = START_CAL; // for error1
+          // end
+          default: begin
+            next_state = CHOOSE;
+          end
+        endcase
+      end
+      READY_INPUT : begin
+        if(input_ctrl_status == 8'h31) // do input please
+          next_state = INPUT;
+        else
+          next_state = READY_INPUT;
+      end
+      INPUT : begin
+        if(input_ctrl_status == 8'h33) // done
+          next_state = START_CAL;
+        else
+          next_state = INPUT;
+      end
+      START_CAL : begin
+        next_state = CALCULATE;
+      end
+      CALCULATE : begin
+        if(matrix_hash_done) // hash calculate is done
+          next_state = OUTPUT_READY;
+        else
+          next_state = CALCULATE;
+      end
+      OUTPUT_READY : begin
+        // if(polyvec_ctrl_status == 0) // TODO
+          // next_state = OUTPUT;
+        // else
+          next_state = OUTPUT_READY;
+      end
+      OUTPUT : begin
+        // if(counter == 16)
+          // next_state = OUTPUT_DONE;
+        // else
+          next_state = OUTPUT;
+      end
+      OUTPUT_DONE : begin
+        case (matrix_hash_ctrl_cmd)
+          8'h1 : begin // there is currently no other commands
+            if(seq >= 3) 
+              next_state = SEQUENCE_DONE;            
+            else
+              next_state = START_CAL;
+          end
+          // 8'h2 : begin
+          //   next_state = SEQUENCE_DONE;            
+          // end 
+          default: begin
+            next_state = OUTPUT_DONE;
+          end 
+        endcase
+      end
+      SEQUENCE_DONE : begin
+        // waits for the command to return to 0
+        if(matrix_hash_ctrl_cmd == 8'h0)
+          next_state = IDLE;
+        else
+          next_state = SEQUENCE_DONE;
+      end
+      default:
+        $display("forbidden state");
+    endcase
+  end
+end
+
+// MATRIX HASH STATE FLAG
+always @(*) begin
+  if(reset) begin
+    status(0);
+
+    matrix_hash_s_set     = 0;
+    matrix_hash_s_full_in = 0;
+    matrix_hash_s_readin  = 0;
+    matrix_hash_s_readout = 0;
+
+    counter_ctrl   = 0;
+    seq = 0;
+    type(0);
+
+  end
+  else if(set) begin
+    case (curr_state)
+      IDLE : begin
+        status(0);
+        matrix_hash_s_set = 1; // readin_ok flag is behind a set flag bruhhhh
+        matrix_hash_s_full_in = 0;
+        matrix_hash_s_readin = 0;
+      end
+      READY_INPUT : begin
+        status(1);
+      end
+      INPUT : begin
+        status(2);
+        matrix_hash_s_readin = 1;
+      end
+      START_CAL : begin
+        seq = seq + 1;
+        matrix_hash_s_full_in = 1; // pulse high
+      end
+      CALCULATE : begin
+        matrix_hash_s_full_in = 0; // pulse low
+        status(3);
+        matrix_hash_s_readin = 0;
+      end
+      OUTPUT_READY : begin
+        status(4);
+      end
+      OUTPUT : begin
+        status(5);
+        matrix_hash_s_readout = 1;
+        counter_ctrl = 1;
+      end
+      OUTPUT_DONE : begin
+        status(6);
+        matrix_hash_s_readout = 0;
+        counter_ctrl = 0;
+      end
+      SEQUENCE_DONE : begin
+        status(8'h10);
+      end
+    endcase
+  end
+end
+
+task status(input [7:0] st);
+begin
+  matrix_hash_ctrl_status = st;
+end
+endtask
+
+task type(input [7:0] tp);
+begin
+  seq_type = tp;
+end
+endtask
+
 endmodule
