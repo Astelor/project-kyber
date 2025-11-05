@@ -1,3 +1,6 @@
+/*
+This module is resistent to unstable readout signal
+*/
 module decompress1(
   input clk,
   input set,
@@ -13,8 +16,7 @@ module decompress1(
   output reg  [7:0] out_index,
 
   output wire readin_ok,
-  output wire readout_ok,
-  output wire done
+  output wire readout_ok
 );  
 
 
@@ -81,8 +83,7 @@ decompress1_fsm fsm(
   .ram_we_ok     (ram_we_ok),
   .readin_ok_fsm (readin_ok_fsm),
   .readout_ok_fsm(readout_ok_fsm),
-  .ctrl_status   (ctrl_status),
-  .done(done)
+  .ctrl_status   (ctrl_status)
 );
 
 // MODULE END =================================//
@@ -123,7 +124,6 @@ parameter OFFSET = 1;
 
 always @(posedge clk or posedge reset) begin
   if(reset) begin
-    counter    <=   0;
     ram_we_2   <= 'dz;
     ram_addr_2 <= 'dz;
     ram_din_2  <= 'dz;
@@ -165,7 +165,7 @@ always @(posedge clk or posedge reset) begin
       end
       default: begin
         // status is resetted to 0 in the FSM
-        $display("default??");
+        $display("[%0t] in decompress1 module: default??", $time);
       end 
     endcase
   end
@@ -196,7 +196,7 @@ end
 always @(posedge clk or posedge reset) begin
   if(reset) begin
     counter <= 0;
-    out_index_temp <= 0;
+    // out_index <= 0;
   end
   else if(set) begin
     out_index <= out_index_temp;
@@ -225,8 +225,7 @@ module decompress1_fsm(
   output reg  ram_we_ok,
   output reg  readin_ok_fsm,
   output reg  readout_ok_fsm,
-  output reg [3:0] ctrl_status, // idk if it's actually needed :P
-  output reg done // -> ??
+  output reg [3:0] ctrl_status // idk if it's actually needed :P
 );
 
 localparam IDLE         = 1;
@@ -320,7 +319,6 @@ always @(posedge clk or posedge reset) begin
     readin_fsm     <= 0;
     ram_we_ok      <= 0;
     readout_ok_fsm <= 0;
-    done           <= 0;
   end
   else if(set) begin
     case(curr_state) 

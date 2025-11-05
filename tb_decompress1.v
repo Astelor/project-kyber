@@ -40,8 +40,7 @@ decompress1 bruh(
   .decomp_dout_2 (decomp_dout_2),
   .out_index     (out_index),
   .readin_ok     (readin_ok),
-  .readout_ok    (readout_ok),
-  .done          (done)
+  .readout_ok    (readout_ok)
 );
 
 reg [7:0] msg [31:0]; // secret message key
