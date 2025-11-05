@@ -1,6 +1,5 @@
 module tb_kyber_pke_enc;
 
-localparam DEPTH = 8; // surely this is not going to make my life harder
 // SYSTEM
 reg clk = 0;
 reg set = 0;
@@ -18,7 +17,7 @@ wire readin_ok;
 wire done;
 wire [3:0] input_type;
 
-kyber_pke_enc #(DEPTH) bruh(
+kyber_pke_enc bruh(
   .clk(clk),
   .set(set),
   .reset(reset),
@@ -40,12 +39,15 @@ end
 
 reg [7:0] mem [255:0]; // match kyber_din
 reg [7:0] ekt [(384*3)-1:0]; // for public key t
+reg [7:0] msg [31:0]; // secret message key
 // TODO: design a test data that compresses the 0~(256*3 - 1) to ekt
 // so that the end result to polyvec b port is ordered number
 // for testing
 initial begin
   $readmemh("D:/!Github_coding/project-kyber/poly_test.hex", mem);
   $readmemh("D:/!Github_coding/project-kyber/ekt_test.hex", ekt);
+  $readmemh("D:/!Github_coding/project-kyber/poly_test.hex", msg);
+  
   data_type <= 0;
   #15 reset <= 1;
   #5 reset <= 0;
@@ -68,7 +70,7 @@ always @(posedge clk) begin
         din <= mem[index] + 2; 
                     //$random & 'hff;
       end
-      if(index == (1<<5)) begin
+      if(index == ( 1 << 5)) begin
         //index <= 0;
         //readin_a <= 0;
         full_in <= 1;
@@ -93,8 +95,37 @@ always @(posedge clk) begin
         full_in <= 0;
       end
     end
+    3 : begin
+      data_type <= 3;
+      if(readin_ok & readin) begin
+        index <= index + 1;
+        in_index <= index;
+        din <= mem[index] + 5;
+      end
+      if(index == (1 << 5) - 1 ) begin // TODO: this difference is kinda bad?
+        full_in <= 1;
+      end
+      else begin
+        full_in <= 0;
+      end
+    end
+    4 : begin
+      data_type <= 4;
+      if(readin_ok & readin) begin
+        index <= index + 1;
+        in_index <= index;
+        din <= mem[index] + 7;
+      end
+      if(index == (1 << 5) - 1 ) begin // TODO: this difference is kinda bad?
+        full_in <= 1;
+      end
+      else begin
+        full_in <= 0;
+      end
+    end
     default: begin
       // nothing
+      data_type <= 0;
       index <= 0;
     end 
   endcase
