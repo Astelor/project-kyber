@@ -28,7 +28,7 @@ matrix_hash_stub bruh(
   .readin(readin),
   .readout(readout),
   .full_in(full_in),
-  .nonce(nonce),
+  // .nonce(nonce),
   
   .matrix_hash_din(matrix_hash_din),
   .in_index(in_index),

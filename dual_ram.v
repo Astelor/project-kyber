@@ -39,7 +39,7 @@ end
 
 
 // this is used for stub modules
-task load_mem(input [1:0] type);
+task load_mem(input [2:0] type);
   begin
     case (type)
       0: begin
@@ -54,8 +54,12 @@ task load_mem(input [1:0] type);
       3: begin
         $readmemh("/!Github_coding/project-kyber/sim_hash_stub/mem3_hash_stub.hex", mem);
       end
+      4 : begin
+        $readmemh("/!Github_coding/project-kyber/sim_hash_stub/mem_matrix_hash_stub.hex", mem);
+      end
     endcase
   end
 endtask
+
 
 endmodule

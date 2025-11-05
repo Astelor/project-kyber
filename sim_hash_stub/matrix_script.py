@@ -41,6 +41,7 @@ flag = 0
 flag2 = 0
 # gest = "it_nothing"
 counter = 0
+matt = [0]*256
 
 fd2.write(str(flag2))
 fd2.close()
@@ -101,7 +102,7 @@ while 1:
         fd2.close()
     
     sys.stdout.write('\r')
-    sys.stdout.write("_[%s] hash stubbing [+] flag1 = %s. flag2 = %s. hash snippet: %s [%2d]" % (anim[k], flag, flag2 ,hex((matt[0]<<24)+(matt[1]<<12)+(matt[2])), counter))
+    sys.stdout.write("_[%s] matrix hash stubbing [+] flag1 = %s. flag2 = %s. hash snippet: %s [%2d]" % (anim[k], flag, flag2 ,hex((matt[0]<<24)+(matt[1]<<12)+(matt[2])), counter))
     k = (k + 1)%len(anim)
     
     sleep(0.25)

@@ -13,7 +13,8 @@ module matrix_hash_stub(
   input readin,
   input readout,
   input full_in,
-  input [7:0] nonce, // manage externally for module coherence
+  input [7:0] nonce1, // manage externally for module coherence
+  input [7:0] nonce2, 
   input [7:0] matrix_hash_din,
   input [7:0] in_index,
 
@@ -74,7 +75,7 @@ wire ram_b_we_ok_fsm;
 wire [7:0] counter_fsm;
 wire shake128_full_in;
 reg [7:0] shake128_done_read;
-wire shake128_done = shake128_done_read - 'd48;
+wire shake128_done = shake128_done_read - 'd48; // it's read as a character
 wire readin_ok_fsm;
 wire pulse;
 
@@ -105,6 +106,9 @@ reg [4:0] index_a;
 reg [7:0] index_b;
 reg [7:0] counter;
 reg readin_ok_r;
+reg [7:0] nonce1_r;
+reg [7:0] nonce2_r;
+
 // INTERNAL REG END ===========================//
 
 // ASSIGN BEGIN ===============================//
@@ -185,9 +189,13 @@ always @(posedge clk or posedge reset) begin
       index_b <= 0;
       counter <= 0;
     end
+    if(full_in) begin
+      nonce1_r <= nonce1;
+      nonce2_r <= nonce2;
+    end
     $fwrite(fd2,"%b", shake128_full_in);
     $rewind(fd2);
-    $fread(shake128_done_read, fd3, 0, 1);
+    $fread(shake128_done_read, fd3, 0, 1); // read the flag into register
     $rewind(fd3);
 
     if(shake128_done) begin
@@ -199,7 +207,20 @@ always @(posedge clk or posedge reset) begin
 end
 
 // with the nonce in :>
-wire [7:0] stub_mem = (counter == 32) ? nonce : ram_a_dout_1;
+reg [7:0] stub_mem;//= (counter == 32) ? nonce1 : ram_a_dout_1;
+always @(*) begin
+  if(set) begin
+    if(counter == 32) begin
+      stub_mem = nonce1_r;
+    end
+    else if(counter == 33) begin
+      stub_mem = nonce2_r;
+    end
+    else begin
+      stub_mem = ram_a_dout_1;
+    end
+  end
+end
 // stub logic, write the content of ram_a into a file
 always @(posedge clk) begin
   if(set & iscal /*& (~pulse)*/) begin 
@@ -277,7 +298,7 @@ always @(*) begin
         next_state = STAT_S1;
       end
       STAT_S1 : begin
-        if(counter == 31) // the timing for ram_a -> stub logic (python script)
+        if(counter == 32) // the timing for ram_a -> stub logic (python script)
           next_state = STAT_S2;
         else
           next_state = STAT_S1;
