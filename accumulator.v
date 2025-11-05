@@ -1,5 +1,6 @@
 /*
-A special accumulator that contains a memory block
+A special accumulator that contains a memory block.
+It doesn't have much guardrails, it does what the input tells it to do. 
 */
 module accumulator(
   input clk,
@@ -12,6 +13,8 @@ module accumulator(
   // 2 acc yes addition, pull data from memory, perform addition with input data, and write it back
   // 3 output the data in the memory
   // TODO: does it need a command to clear the memory?
+  input             readin, // because my design sucks
+  input             readout,
   input      [ 6:0] addr_a,
   input      [ 6:0] addr_b,
   input      [15:0] data_a,
@@ -20,6 +23,7 @@ module accumulator(
   output reg [ 6:0] addr_out,
   output reg [15:0] data_a_out,
   output reg [15:0] data_b_out,
+  
   output     [ 3:0] status // directly correspond to the command its executing 
 );
 
@@ -102,41 +106,98 @@ accumulator_fsm fsm(
   .set(set),
   .reset(reset),
   
+  .cmd(cmd), // from outside
+  .readin(readin), // from outside
   .ctrl(ctrl),
   .ram_a_s_we(ram_a_s_we),
   .ram_b_s_we(ram_b_s_we),
-  .cmd(cmd), // from outside
   .status(status) // to outside
 );
 
 // MODULES END ================================== 
 
 // LOCAL REG BEGIN ==============================
+// readin
+reg readin_t;
+reg readin_t_1;
+reg readin_t_2;
+// data
 reg [15:0] data_a_t;
 reg [15:0] data_b_t;
+// addr
 reg [ 6:0] addr_a_t;
 reg [ 6:0] addr_b_t;
+// counter
 reg [ 6:0] counter;
 reg [ 6:0] counter_t_1;
 reg [ 6:0] counter_t_2;
 // LOCAL REG END ================================
 
 // ASSGIN BEGIN =================================
-assign ram_a_we_2 = ram_a_s_we; 
-assign ram_b_we_2 = ram_b_s_we; 
+assign ram_a_we_2 = ram_a_s_we & readin_t_1; // the sequence delay for cmd 1 and 2 are different, this config works for cmd 1 but not 2. cmd 2 needs readin_t_2
+assign ram_b_we_2 = ram_b_s_we & readin_t_1;
 assign ram_a_we_1 = 0;
 assign ram_b_we_1 = 0;
 
 // ASSGIN END ===================================
 
 always @(*) begin
-  if(set && ctrl == 2) begin
-    adder_a_data_1 = ram_a_dout_1;
-    adder_b_data_1 = ram_b_dout_1;
-  end
-  else begin
-    adder_a_data_1 = 0;
-    adder_b_data_1 = 0;
+  if(set) begin
+    case (ctrl)
+      0 : begin
+        
+      end
+      1 : begin
+        if(readin_t) begin
+          adder_a_addr   = addr_a_t;
+          adder_b_addr   = addr_b_t;
+          adder_a_data_1 = data_a_t;
+          adder_b_data_1 = data_b_t;
+          adder_a_data_2 = 0;
+          adder_b_data_2 = 0;
+        end
+        if(readin_t_1) begin
+          ram_a_addr_2 = adder_a_addr_out;
+          ram_b_addr_2 = adder_b_addr_out;
+
+          ram_a_din_2  = adder_a_data_out;
+          ram_b_din_2  = adder_b_data_out;
+        end
+      end
+      2 : begin
+        if(readin) begin
+          ram_a_addr_1   = addr_a;
+          ram_b_addr_1   = addr_b;
+        end
+        if(readin_t) begin
+          adder_a_addr   = addr_a_t;
+          adder_b_addr   = addr_b_t;
+          adder_a_data_1 = data_a_t;
+          adder_b_data_1 = data_b_t;
+          adder_a_data_2 = ram_a_dout_1;
+          adder_b_data_2 = ram_b_dout_1;
+        end
+        if(readin_t_1) begin
+          ram_a_addr_2   = adder_a_addr_out;
+          ram_b_addr_2   = adder_b_addr_out;
+          ram_a_din_2    = adder_a_data_out;
+          ram_b_din_2    = adder_b_data_out;
+        end
+      end
+      3 : begin
+        ram_a_addr_1 = counter;
+        ram_b_addr_1 = counter;
+        
+        addr_out     = counter_t_2; // TODO: this is delayed
+        
+        data_a_out   = ram_a_dout_1;
+        data_b_out   = ram_b_dout_1;
+      end
+      default : begin
+        adder_a_data_1 = 0;
+        adder_b_data_1 = 0;
+      end
+    endcase
   end
 end
 
@@ -150,59 +211,30 @@ always @(posedge clk or posedge reset) begin
       0 : begin
         // idle
         counter <= 0; // TODO: does this need a specific unstable signal resistant thing?, maybe redundant.
-        
-      end
-      1 : begin
-        // no add
-        ram_a_addr_2 <= addr_a;
-        ram_b_addr_2 <= addr_b;
-        ram_a_din_2  <= data_a;
-        ram_b_din_2  <= data_b;
-      end 
-      2 : begin
-        // yes add
-        // RAM
-        ram_a_addr_1   <= addr_a;
-        ram_b_addr_1   <= addr_b;
-        ram_a_addr_2   <= adder_a_addr_out;
-        ram_b_addr_2   <= adder_b_addr_out;
-        ram_a_din_2    <= adder_a_data_out;
-        ram_b_din_2    <= adder_b_data_out;
-        
-        // ADDER
-        adder_a_addr   <= addr_a_t;
-        adder_b_addr   <= addr_b_t;
-        // adder_a_data_1 <= ram_a_dout_1;
-        // adder_b_data_1 <= ram_b_dout_1;
-        adder_a_data_2 <= data_a_t;
-        adder_b_data_2 <= data_b_t;
       end
       3 : begin
         // output memory
-        counter      <= counter + 7'd1;
-        ram_a_addr_1 <= counter;
-        ram_b_addr_1 <= counter;
-
-        addr_out     <= counter_t_2; // TODO: this is delayed
-        data_a_out   <= ram_a_dout_1;
-        data_b_out   <= ram_b_dout_1;
+        if(readout) begin
+          counter <= counter + 7'd1;
+        end
       end
-      default: begin
-        
-      end 
     endcase
-  end
-  else begin
-    
   end
 end
 
 // data propagation to account for RAM read delay
 always @(posedge clk) begin
+  // readin
+  readin_t    <= readin;
+  readin_t_1  <= readin_t;
+  readin_t_2  <= readin_t_1;
+  // data
   data_a_t    <= data_a;
   data_b_t    <= data_b;
+  // addr
   addr_a_t    <= addr_a;
   addr_b_t    <= addr_b;
+  // counter
   counter_t_1 <= counter;
   counter_t_2 <= counter_t_1;
 end
@@ -241,22 +273,19 @@ module accumulator_fsm (
   input set,
   input reset,
 
+  input [3:0] cmd,
+  input       readin,
+
   output reg [3:0] ctrl,
-  output reg ram_a_s_we,
-  output reg ram_b_s_we,
-  input [3:0] cmd, 
+  output reg       ram_a_s_we,
+  output reg       ram_b_s_we,
   output reg [3:0] status
 );
 
-localparam IDLE     = 1;
-// localparam MODE_0   = 2;
-localparam MODE_1   = 3;
-localparam MODE_2   = 4;
-localparam MODE_2_0 = 6;
-localparam MODE_2_1 = 7;
-localparam MODE_2_2 = 8;
-localparam MODE_2_3 = 9;
-localparam MODE_3   = 5;
+localparam IDLE   = 1;
+localparam MODE_1 = 2;
+localparam MODE_2 = 3;
+localparam MODE_3 = 4;
 
 reg [7:0] curr_state;
 reg [7:0] next_state;
@@ -281,12 +310,6 @@ always @(*) begin
           default: next_state = IDLE;
         endcase
       end
-      // MODE_0 : begin
-      //   if(cmd != 0)
-      //     next_state = IDLE;
-      //   else
-      //     next_state = MODE_0;
-      // end
       // MODE 1
       MODE_1 : begin
         if(cmd != 1)
@@ -296,22 +319,10 @@ always @(*) begin
       end
       // MODE 2
       MODE_2 : begin
-        next_state = MODE_2_0;
-      end
-      MODE_2_0 : begin
-        next_state = MODE_2_1;
-      end
-      MODE_2_1 : begin
         if(cmd != 2)
-          next_state = MODE_2_2;
+          next_state = IDLE;
         else
-          next_state = MODE_2_1;
-      end
-      MODE_2_2 : begin
-        next_state = MODE_2_3;
-      end
-      MODE_2_3 : begin
-        next_state = IDLE;
+          next_state = MODE_2;
       end
       // MODE 3
       MODE_3 : begin
@@ -354,19 +365,8 @@ always @(posedge clk or posedge reset) begin
       MODE_2 : begin
         status_task(2);
         ctrl_task(2);
-      end
-      MODE_2_0 : begin
-        // ?
-      end
-      MODE_2_1 : begin
         ram_a_s_we <= 1;
         ram_b_s_we <= 1;
-      end
-      MODE_2_2 : begin
-        // ?
-      end
-      MODE_2_3 : begin
-        // ?
       end
       // MODE 3
       MODE_3 : begin

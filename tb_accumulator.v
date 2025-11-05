@@ -4,6 +4,8 @@ reg clk = 0;
 reg set = 0;
 reg reset = 0;
 reg  [ 3:0] cmd;
+reg         readin = 0;
+reg         readout = 0;
 reg  [ 6:0] addr_a, addr_b;
 reg  [15:0] data_a, data_b;
 wire [ 6:0] addr_out; 
@@ -16,6 +18,8 @@ accumulator bruh(
   .reset(reset),
   // INPUT
   .cmd(cmd),
+  .readin(readin),
+  .readout(readout),
   .addr_a(addr_a),
   .addr_b(addr_b),
   .data_a(data_a),
@@ -32,6 +36,8 @@ always begin
 end
 
 reg [7:0] mem [127:0];
+reg [3:0] why = 0;
+reg flag;
 
 initial begin
   $readmemh("D:/!Github_coding/project-kyber/poly_test.hex", mem);
@@ -39,6 +45,8 @@ initial begin
   #5 reset <= 0;
   #5 set <= 1;
   command(1);
+  flag <= 1;
+  // why <= 1;
   $stop
   ;
 end
@@ -49,6 +57,8 @@ parameter TEST_OFFSET = 0;
 
 always @(posedge clk) begin
   if(cmd == 1 && status == 1) begin
+    // command(1);
+    readin <= 1;
     index <= index + 1;
     addr_a <= index;
     addr_b <= index;
@@ -56,19 +66,29 @@ always @(posedge clk) begin
                        //$random & 'hff;
     data_b <= mem[index] + 7;
   end
-  if(cmd == 2 && status == 2) begin
+  if(cmd == 2 && status == 2 && flag == 1) begin
+    // command(2);
+    readin <= 1;
     index <= index + 1;
     addr_a <= index;
     addr_b <= index;
     data_a <= mem[index] + 1; 
     data_b <= mem[index] + 1; 
   end
-  if(status == 0 ) begin
+  if(cmd == 0) begin
     index <= 0;
+    readin <= 0;
+    command(2);
   end
-  if(index == 127) begin
-    command(0);
-    index <= 0;
+  if(index == 128) begin
+    if(cmd == 1)
+      command(0);
+    if(cmd == 2) begin
+      flag <= 0;
+    end
+    // why <= 0;
+    // flag <= 0;
+    readin <= 0;
   end
 end
 
