@@ -64,15 +64,14 @@ always @(posedge clk) begin
   case (input_type)
     1 : begin // randomness R for
       data_type <= 1;
-      if(readin_ok & readin) begin
+      if(readin_ok /*& readin*/) begin
+        readin <= 1;
         index <= index + 1;
         in_index <= index;
         din <= mem[index] + 2; 
                     //$random & 'hff;
       end
       if(index == ( 1 << 5)) begin
-        //index <= 0;
-        //readin_a <= 0;
         full_in <= 1;
         // readin <= 0;
       end
@@ -82,7 +81,8 @@ always @(posedge clk) begin
     end
     2 : begin
       data_type <= 2;
-      if(readin_ok & readin) begin
+      if(readin_ok /*& readin*/) begin
+        readin <= 1;
         index <= index + 1;
         in_index <= index;
         din <= ekt[index];
@@ -96,8 +96,10 @@ always @(posedge clk) begin
       end
     end
     3 : begin
+      
       data_type <= 3;
-      if(readin_ok & readin) begin
+      if(readin_ok /*& readin*/) begin
+        readin <= 1;
         index <= index + 1;
         in_index <= index;
         din <= mem[index] + 5;
@@ -111,7 +113,8 @@ always @(posedge clk) begin
     end
     4 : begin
       data_type <= 4;
-      if(readin_ok & readin) begin
+      if(readin_ok /*& readin*/) begin
+        readin <= 1;
         index <= index + 1;
         in_index <= index;
         din <= mem[index] + 7;
@@ -127,6 +130,7 @@ always @(posedge clk) begin
       // nothing
       data_type <= 0;
       index <= 0;
+      readin <= 0;
     end 
   endcase
 end

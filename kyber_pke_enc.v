@@ -169,19 +169,19 @@ decode12 dec12(
 
 // POLYVEC_BASEMUL ==========
 wire polyvec_set;
-wire polyvec_readin_a;
+reg  polyvec_readin_a;
 reg  polyvec_readin_b;
 
-wire polyvec_readout;
+reg  polyvec_readout;
 wire polyvec_cal_en;
 
-wire polyvec_full_in_a;
+reg  polyvec_full_in_a;
 reg  polyvec_full_in_b;
 
-wire [15:0] polyvec_din_a_1;
-wire [15:0] polyvec_din_a_2;
-wire [7:0]  polyvec_ina_index;
-wire [3:0]  polyvec_ina_k;
+reg  [15:0] polyvec_din_a_1;
+reg  [15:0] polyvec_din_a_2;
+reg  [7:0]  polyvec_ina_index;
+reg  [3:0]  polyvec_ina_k;
 
 reg  [15:0] polyvec_din_b_1;
 reg  [15:0] polyvec_din_b_2;
@@ -369,24 +369,41 @@ matrix_hash_stub matrix_hash(
 //   end
 // endgenerate
 
-// // RAM 2, polynomial
-// reg         ram2_we_1,   ram2_we_2;
-// reg  [7:0]  ram2_addr_1, ram2_addr_2;
-// reg  [15:0] ram2_din_1,  ram2_din_2;
-// wire [15:0] ram2_dout_1, ram2_dout_2;
+// MEMORY 1
+wire        accu1_set [0:2];
+wire [ 3:0] accu1_cmd [0:2];
+reg         accu1_readin [0:2];
+wire        accu1_readout[0:2];
+reg  [ 6:0] accu1_addr_a [0:2], accu1_addr_b [0:2];
+reg  [15:0] accu1_data_a [0:2], accu1_data_b [0:2];
+wire [ 6:0] accu1_addr_out [0:2];
+wire [15:0] accu1_data_a_out [0:2], accu1_data_b_out [0:2];
+wire [ 3:0] accu1_status [0:2];
+genvar i;
+generate
+  for(i = 0; i < 3; i = i + 1) begin : GENACC
+    accumulator accu1(
+      .clk(clk),
+      .set(accu1_set [i]),
+      .reset(reset),
+      // INPUT
+      .cmd       (accu1_cmd     [i]),
+      .readin    (accu1_readin  [i]),
+      .readout   (accu1_readout [i]),
+      .addr_a    (accu1_addr_a  [i]),
+      .addr_b    (accu1_addr_b  [i]),
+      .data_a    (accu1_data_a  [i]),
+      .data_b    (accu1_data_b  [i]),
+      // OUTPUT
+      .addr_out  (accu1_addr_out   [i]),
+      .data_a_out(accu1_data_a_out [i]),
+      .data_b_out(accu1_data_b_out [i]),
+      .status    (accu1_status     [i])
+    );
+  end
+endgenerate
 
-// dual_ram #(8, 16) ram2(
-//   .clk(clk),
-//   .we_1  (ram2_we_1),
-//   .we_2  (ram2_we_2),
-//   .addr_1(ram2_addr_1),
-//   .addr_2(ram2_addr_2),
-//   .din_1 (ram2_din_1),
-//   .din_2 (ram2_din_2),
-//   .dout_1(ram2_dout_1),
-//   .dout_2(ram2_dout_2)
-// );
-
+// MEMORY 2
 wire        accu2_set;
 wire [ 3:0] accu2_cmd;
 reg         accu2_readin;
@@ -446,8 +463,8 @@ wire [7:0] decomp_ctrl_cmd;
 wire [7:0] matrix_hash_ctrl_status;
 wire [7:0] matrix_hash_ctrl_cmd;
 
-// wire [7:0] mem1_ctrl_status;
-// wire [7:0] mem1_ctrl_cmd;
+wire [7:0] accu1_ctrl_status;
+wire [7:0] accu1_ctrl_cmd;
 
 wire [7:0] accu2_ctrl_status;
 wire [7:0] accu2_ctrl_cmd;
@@ -466,7 +483,7 @@ kyber_pke_enc_fsm fsm(
   .invntt_ctrl_status     (invntt_ctrl_status),
   .decomp_ctrl_status     (decomp_ctrl_status),
   .matrix_hash_ctrl_status(matrix_hash_ctrl_status),
-  // .mem1_ctrl_status       (mem1_ctrl_status),
+  // .accu1_ctrl_status       (accu1_ctrl_status),
   .accu2_ctrl_status       (accu2_ctrl_status),
   // OUTPUT
   // -- INTERNAL
@@ -478,8 +495,8 @@ kyber_pke_enc_fsm fsm(
   .invntt_ctrl_cmd        (invntt_ctrl_cmd),
   .decomp_ctrl_cmd        (decomp_ctrl_cmd),
   .matrix_hash_ctrl_cmd   (matrix_hash_ctrl_cmd),
-  // .mem1_ctrl_cmd          (mem1_ctrl_cmd),
-  .accu2_ctrl_cmd          (accu2_ctrl_cmd),
+  .accu1_ctrl_cmd         (accu1_ctrl_cmd),
+  .accu2_ctrl_cmd         (accu2_ctrl_cmd),
   // -- OUTSIDE
   .done(done)
 );
@@ -612,10 +629,11 @@ wire polyvec_s_set;
 wire polyvec_s_readout;
 wire polyvec_s_readin_a;
 wire polyvec_s_readin_b;
-// wire [3:0] polyvec_seq;
+wire [3:0] polyvec_seq;
 wire polyvec_s_full_in_a;
 wire polyvec_s_full_in_b;
 
+wire [3:0] polyvec_a_s_type;
 wire polyvec_counter_ctrl;
 reg [7:0] polyvec_counter;
 
@@ -624,24 +642,26 @@ kyber_pke_enc_polyvec_fsm polyvec_fsm(
   .set(set),  
   .reset(reset),
   // INPUT
-  .polyvec_done       (polyvec_done),
-  .polyvec_readin_a_ok(polyvec_readin_a_ok),
-  .polyvec_readin_b_ok(polyvec_readin_b_ok),
+  .polyvec_done        (polyvec_done),
+  .polyvec_readin_a_ok (polyvec_readin_a_ok),
+  .polyvec_readin_b_ok (polyvec_readin_b_ok),
   // OUTPUT
-  .polyvec_s_set      (polyvec_s_set),
-  .polyvec_s_readout  (polyvec_s_readout), // directly to outside
-  .polyvec_s_cal_en   (polyvec_cal_en), // TODO: comply it into the same format?
+  .polyvec_s_set       (polyvec_s_set),
+  .polyvec_s_readout   (polyvec_s_readout), // directly to outside
+  .polyvec_s_cal_en    (polyvec_cal_en), // TODO: comply it into the same format?
 
-  .polyvec_s_readin_a (polyvec_s_readin_a),
-  .polyvec_s_readin_b (polyvec_s_readin_b),
-  .polyvec_full_in_a  (polyvec_s_full_in_a),
-  .polyvec_full_in_b  (polyvec_s_full_in_b),
+  .polyvec_s_readin_a  (polyvec_s_readin_a),
+  .polyvec_s_readin_b  (polyvec_s_readin_b),
+  .polyvec_s_full_in_a (polyvec_s_full_in_a),
+  .polyvec_s_full_in_b (polyvec_s_full_in_b),
   
   // SOMETHING SOMETHING...
-  .counter_ctrl       (polyvec_counter_ctrl),
-  .counter            (polyvec_counter),
-  // .seq                (polyvec_seq),
+  .polyvec_a_s_type    (polyvec_a_s_type),
+  .counter_ctrl        (polyvec_counter_ctrl),
+  .counter             (polyvec_counter),
+  .seq                 (polyvec_seq),
   // BIG CONTROL
+  .input_ctrl_status      (input_ctrl_status),
   .ntt_ctrl_status        (ntt_ctrl_status),
   .invntt_ctrl_status     (invntt_ctrl_status),
   .matrix_hash_ctrl_status(matrix_hash_ctrl_status),
@@ -655,6 +675,7 @@ wire invntt_s_readin;
 wire invntt_s_readout;
 wire invntt_s_cal_en;
 wire invntt_s_full_in;
+wire [3:0] invntt_s_seq;
 
 kyber_pke_enc_invntt_fsm invntt_fsm(
   .clk(clk),
@@ -670,6 +691,7 @@ kyber_pke_enc_invntt_fsm invntt_fsm(
   .invntt_s_readout   (invntt_s_readout),
   .invntt_s_cal_en    (invntt_s_cal_en),
   .invntt_s_full_in   (invntt_s_full_in),
+  .invntt_s_seq       (invntt_s_seq), // this should talk with the accu1_fsm
 
   .polyvec_ctrl_status(polyvec_ctrl_status),
   .accu2_ctrl_status  (accu2_ctrl_status),
@@ -679,10 +701,6 @@ kyber_pke_enc_invntt_fsm invntt_fsm(
 
 
 // DECOMP CONTROL ===========
-// TODO: this thing doesn't have a RAM
-//        is it okay to pass it through and not store it?
-//        heh?? I guess???
-// no I don't think so?
 wire decomp_s_set;
 wire decomp_s_readin;
 wire decomp_s_readout;
@@ -713,6 +731,7 @@ wire matrix_hash_s_set;
 wire matrix_hash_s_full_in;
 wire matrix_hash_s_readin;
 wire matrix_hash_s_readout;
+wire [3:0] matrix_hash_seq;
 
 wire matrix_hash_counter_ctrl;
 reg [7:0] matrix_hash_counter;
@@ -733,22 +752,44 @@ kyber_pke_enc_matrix_hash_fsm matrix_hash_fsm(
 
   .counter_ctrl           (matrix_hash_counter_ctrl),
   .counter                (matrix_hash_counter),
+  .matrix_hash_seq        (matrix_hash_seq),
+
   .input_ctrl_status      (input_ctrl_status),
   .polyvec_ctrl_status    (polyvec_ctrl_status),
   .matrix_hash_ctrl_cmd   (matrix_hash_ctrl_cmd),
   .matrix_hash_ctrl_status(matrix_hash_ctrl_status)
 );
 
-// kyber_pke_enc_mem1_fsm mem1_fsm(
-//   .clk(clk),
-//   .set(set),
-//   .reset(reset),
-//   // .ram1_we_1(),
-//   // .ram1_we_2(),
 
-//   .mem1_ctrl_cmd   (mem1_ctrl_cmd),
-//   .mem1_ctrl_status(mem1_ctrl_status)
-// );
+// MEM 1 CONTROL 
+wire [3:0] accu1_s_cmd;
+wire accu1_s_readin;
+wire accu1_s_readout;
+wire [3:0] accu1_s_type;
+
+kyber_pke_enc_accu1_fsm accu1_fsm(
+  .clk(clk),
+  .set(set),
+  .reset(reset),
+  
+  .accu1_status_1      (accu1_status [0]),
+  .accu1_status_2      (accu1_status [1]),
+  .accu1_status_3      (accu1_status [2]),
+
+  .accu1_s_cmd         (accu1_s_cmd),
+  .accu1_s_readin      (accu1_s_readin),
+  .accu1_s_readout     (accu1_s_readout),
+  .accu1_s_type        (accu1_s_type),
+
+  .cbd_type            (cbd_type),
+  .cbd_counter         (cbd_counter),
+  .invntt_s_seq        (invntt_s_seq),
+
+  .cbd_ctrl_status     (cbd_ctrl_status),
+  .invntt_ctrl_status  (invntt_ctrl_status),
+  .accu1_ctrl_cmd      (accu1_ctrl_cmd),
+  .accu1_ctrl_status   (accu1_ctrl_status)
+);
 
 // MEM 2 CONTROL 
 wire [3:0] accu2_s_cmd;
@@ -816,13 +857,6 @@ assign dec12_set = 1; // TODO: does this need a case?
 
 // -- POLYVEC
 assign polyvec_set       = set & polyvec_s_set;
-assign polyvec_readin_a  = ntt_readout & polyvec_s_readin_a;
-assign polyvec_readout   = polyvec_s_readout;
-assign polyvec_ina_k     = ntt_seq - 1;
-assign polyvec_din_a_1   = barr1_t;
-assign polyvec_din_a_2   = barr2_t;
-assign polyvec_ina_index = ntt_out_index - 2;
-assign polyvec_full_in_a = polyvec_s_full_in_a;
 
 // -- INVNTT
 assign invntt_set      = set & invntt_s_set;
@@ -863,6 +897,8 @@ always @(*) begin
         hash_din      = kyber_din;
         hash_in_index = kyber_in_index;
       end
+        polyvec_readin_b = 0;
+        polyvec_full_in_b = 0; // TODO: there are too many special rule that combos with the fsm control signal?
     end
     2 : begin // only let it do input when command is present
       if (input_type == data_type) begin
@@ -875,7 +911,7 @@ always @(*) begin
         hash_in_index = 0;
 
         // NOTE: POLYVEC A is from NTT
-        polyvec_din_b_1   = dec12_dout_1; 
+        polyvec_din_b_1   = dec12_dout_1; // decoded encryption key t -> polyvec ram b
         polyvec_din_b_2   = dec12_dout_2; // do it with an fsm because it sucks
         polyvec_readin_b  = dec12_output_ok & polyvec_s_readin_b & readin_ok_r;
         polyvec_inb_k     = (dec12_out_index & 16'h180) >> 7;
@@ -889,13 +925,17 @@ always @(*) begin
         decomp_in_index = kyber_in_index;
         decomp_readin   = readin & readin_ok_r; // does this need a case
       end
+        polyvec_readin_b = 0;
+        polyvec_full_in_b = polyvec_s_full_in_b;
     end
-    4 : begin // seed
+    4 : begin // seed (SampleNTT for generating A matrix)
       if(input_type == data_type) begin
         matrix_hash_full_in  = full_in;
         matrix_hash_din      = kyber_din;
         matrix_hash_in_index = kyber_in_index;
       end
+        polyvec_readin_b = 0;
+        polyvec_full_in_b = polyvec_s_full_in_b;
     end
     default: begin
       // TODO:  set up the other case, 
@@ -911,13 +951,18 @@ always @(*) begin
       // dec12_readin   = 0;
 
       // POLYVEC
-      polyvec_full_in_b = 0;
+      // polyvec_s_readin_b = 0; // note: for ciphertext 1 it is used for the matrix
+      polyvec_full_in_b = polyvec_s_full_in_b;
 
       // DECOMP
       decomp_readin   = 0;
       decomp_full_in  = 0;
       decomp_din      = 0;
       decomp_in_index = 0;
+
+      // MATRIX HASH
+      matrix_hash_full_in  = matrix_hash_s_full_in;
+
     end
   endcase
   case (cbd_type)
@@ -928,11 +973,30 @@ always @(*) begin
       ntt_in_index = (cbd_counter - 4) << 1; // is the power of 2 :)
     end
     2 : begin // from cbd to memory 2 (error 2 + mu)
-      
+      // controlled in accu2_s_type = 2
     end
     default : begin
       
     end
+  endcase
+  case (accu1_s_type) 
+    1 : begin
+      // case (accu1_s_seq)
+      //   // : 
+      //   // default: 
+      // endcase
+      // generate
+      //   for(i = 0; i < 3; i = i + 1) begin
+          
+      //   end
+      // endgenerate
+    end 
+    2 : begin
+      
+    end
+    default: begin
+      
+    end 
   endcase
   case (accu2_s_type) // memory type, determining what goes where 
     1 : begin  // decompressed (upcaled) message -> memory 2
@@ -964,7 +1028,32 @@ always @(*) begin
       // accu2_data_b = 0;
     end
   endcase
-
+  case (polyvec_a_s_type) // TODO: this flag is meant for ram a in polyvec since you can independently control the ports
+    1 : begin // NTT -> polyvec
+      polyvec_readin_a  = ntt_readout & polyvec_s_readin_a;
+      polyvec_readout   = polyvec_s_readout;
+      polyvec_ina_k     = ntt_seq - 1;
+      polyvec_din_a_1   = barr1_t;
+      polyvec_din_a_2   = barr2_t;
+      polyvec_ina_index = ntt_out_index - 2;
+      polyvec_full_in_a = polyvec_s_full_in_a;
+      // polyvec_full_in_b = polyvec_s_full_in_b; // TODO: ??
+    end
+    2 : begin 
+      polyvec_readin_b  = matrix_hash_readout & polyvec_s_readin_b;
+      polyvec_readout   = polyvec_s_readout;
+      polyvec_inb_k     = (matrix_hash_seq - 1)%3;
+      polyvec_din_b_1   = matrix_hash_dout_1;
+      polyvec_din_b_2   = matrix_hash_dout_2;
+      polyvec_inb_index = matrix_hash_out_index << 1;
+      polyvec_full_in_a = polyvec_s_full_in_a;
+      // polyvec_full_in_b = polyvec_s_full_in_b;
+    end
+    default: begin
+      polyvec_readin_a  = polyvec_s_readin_a;
+      polyvec_full_in_a = polyvec_s_full_in_a;
+    end
+  endcase
   // TODO: this is specifically to comply with the specs
   matrix_hash_nonce1 = matrix_hash_nonce % KYBER_K;
   matrix_hash_nonce2 = matrix_hash_nonce / KYBER_K;

@@ -9,7 +9,8 @@ reg readin = 0;
 reg readout = 0;
 
 reg full_in = 0;
-reg [7:0] nonce = 123;
+reg [7:0] nonce1 = 123;
+reg [7:0] nonce2 = 200;
 reg [7:0] matrix_hash_din;
 reg [7:0] in_index;
 // OUTPUT
@@ -28,7 +29,8 @@ matrix_hash_stub bruh(
   .readin(readin),
   .readout(readout),
   .full_in(full_in),
-  // .nonce(nonce),
+  .nonce1(nonce1),
+  .nonce2(nonce2),
   
   .matrix_hash_din(matrix_hash_din),
   .in_index(in_index),

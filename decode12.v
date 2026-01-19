@@ -1,5 +1,5 @@
 /*
-This module works for 
+This module works for (TODO: for what?)
 technically you need to account for the sign extention
 but the public key would be strictly positive integer, 
 so it negates the need for one

@@ -1,5 +1,5 @@
 /*
-TODO: I think the input and output might need a index
+TODO: I think the input and output need a index
 */
 module cbd(
   input clk,

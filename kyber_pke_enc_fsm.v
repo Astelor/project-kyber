@@ -30,8 +30,8 @@ module kyber_pke_enc_fsm(
   output reg [7:0] matrix_hash_ctrl_cmd,
   input [7:0]      matrix_hash_ctrl_status,
   
-  // output reg [7:0] mem1_ctrl_cmd,
-  // input [7:0]      mem1_ctrl_status,
+  output reg [7:0] accu1_ctrl_cmd,
+  input [7:0]      accu1_ctrl_status,
 
   output reg [7:0] accu2_ctrl_cmd,
   input [7:0]      accu2_ctrl_status,
@@ -52,16 +52,23 @@ localparam STAGE_2          =  7;
 localparam SEED             =  8;
 localparam STAGE_3          =  9;
 
-localparam HASH_CBD_2_STAGE = 10;
+localparam HASH_CBD_2_STAGE = 10; // for e2
 localparam HASH_CBD_2       = 11;
 
 localparam CBD_E2_STAGE     = 12;
 localparam CBD_E2           = 13;
 
-localparam E2_MEM_STAGE     = 14;
-localparam E2_MEM           = 15;
+localparam HASH_CBD_1_STAGE = 14; // for e1
+localparam HASH_CBD_1       = 15;
 
-// localparam  = ;
+localparam CBD_E1_STAGE     = 16;
+localparam CBD_E1           = 17;
+
+localparam POLYVEC_MAT_STAGE = 18;
+localparam POLYVEC_MAT       = 19; // matrix A
+
+localparam INTT_2_STAGE    = 20; 
+localparam INTT_2          = 21;
 
 reg [7:0] curr_state;
 reg [7:0] next_state;
@@ -140,7 +147,7 @@ always @(*) begin
           next_state = HASH_CBD_2_STAGE;
       end
       HASH_CBD_2 : begin // wait for cbd to complete sequence 1 (hash command 2)
-        if(cbd_ctrl_status == 8'h10)
+        if(cbd_ctrl_status == 8'h10) // cbd status = 8'h10 = sequence done
           next_state = CBD_E2_STAGE;
         else
           next_state = HASH_CBD_2;
@@ -149,13 +156,46 @@ always @(*) begin
         next_state = CBD_E2;
       end
       CBD_E2 : begin // (cbd command 2)
-        next_state = CBD_E2;
+        if(cbd_ctrl_status == 8'h10) // cbd status = 8'h10 = sequence done
+          next_state = CBD_E1_STAGE;
+        else
+          next_state = CBD_E2;
       end
-      E2_MEM_STAGE : begin
-        next_state = E2_MEM_STAGE;
+      HASH_CBD_1_STAGE : begin // wait for hash_stub to reinitialize
+        if(hash_ctrl_status == 8'h0)
+          next_state = HASH_CBD_1;
+        else
+          next_state = HASH_CBD_1_STAGE;
       end
-      E2_MEM : begin
-        next_state = E2_MEM;
+      HASH_CBD_1 : begin // wait for cbd to complete sequence 1 (hash command 2)
+        if(cbd_ctrl_status == 8'h10) // cbd status = 8'h10 = sequence done
+          next_state = CBD_E1_STAGE;
+        else
+          next_state = HASH_CBD_1;
+      end
+      CBD_E1_STAGE : begin
+        next_state = CBD_E1;
+      end
+      CBD_E1 : begin
+        if(polyvec_ctrl_status == 8'h10) // sequence done
+          next_state = POLYVEC_MAT_STAGE;
+        else
+          next_state = CBD_E1;
+      end
+      POLYVEC_MAT_STAGE : begin
+        next_state = POLYVEC_MAT;
+      end
+      POLYVEC_MAT : begin
+        if(invntt_ctrl_status == 8'h10)
+          next_state = INTT_2_STAGE;
+        else
+          next_state = POLYVEC_MAT;
+      end
+      INTT_2_STAGE : begin
+        next_state = INTT_2;
+      end
+      INTT_2 : begin
+        next_state = INTT_2;
       end
       default:
         $display("forbidden state");
@@ -187,6 +227,7 @@ always @(*) begin
         polyvec_cmd(0);
         invntt_cmd(0);
         decomp_cmd(0);
+        accu1_cmd(0);
         accu2_cmd(0);
         matrix_hash_cmd(0);
 
@@ -226,7 +267,7 @@ always @(*) begin
       STAGE_3 : begin
         input_cmd(0);
       end
-      // MORE COMMAND =======
+      // HASH E2 COMMAND ====
       HASH_CBD_2_STAGE : begin
         hash_cmd(0);
       end
@@ -239,11 +280,30 @@ always @(*) begin
       CBD_E2 : begin
         cbd_cmd(2);
       end
-      E2_MEM_STAGE : begin
-        // accu2();
+      // HASH E1 COMMAND ====
+      HASH_CBD_1_STAGE : begin
+        hash_cmd(0);
       end
-      E2_MEM : begin
-        // accu2();
+      HASH_CBD_1 : begin // for e2 (to be added with upscaled message)
+        hash_cmd(3);
+      end
+      CBD_E1_STAGE : begin
+        cbd_cmd(0);
+      end
+      CBD_E1 : begin
+        cbd_cmd(3);
+      end
+      POLYVEC_MAT_STAGE : begin
+        polyvec_cmd(0);
+      end
+      POLYVEC_MAT : begin
+        polyvec_cmd(2);
+      end
+      INTT_2_STAGE : begin
+        invntt_cmd(0);
+      end
+      INTT_2 : begin
+        invntt_cmd(2);
       end
     endcase
   end
@@ -297,11 +357,11 @@ begin
 end
 endtask
 
-// task mem1_cmd(input [7:0] cmd);
-// begin
-//   mem1_ctrl_cmd = cmd;
-// end
-// endtask
+task accu1_cmd(input [7:0] cmd);
+begin
+  accu1_ctrl_cmd = cmd;
+end
+endtask
 
 task accu2_cmd(input [7:0] cmd);
 begin
@@ -409,12 +469,14 @@ always @(*) begin
       end
       // EKT ==========================
       EKT_INPUT_STAGE : begin
-        // if()
+        if(polyvec_ctrl_status == 1)
         // there's no conflict here,
         // so I think polyvec doesn't need an explicit flag
         // to signal the input fsm
         // TODO: so does it need one?
-        next_state = EKT_INPUT_READY;
+          next_state = EKT_INPUT_READY;
+        else
+          next_state = EKT_INPUT_STAGE;
       end
       EKT_INPUT_READY : begin
         next_state = EKT_INPUT_ACTIVE;
@@ -676,7 +738,11 @@ always @(*) begin
           next_state = INPUT;
       end
       START_CAL : begin
-        next_state = CALCULATE;
+        // if(hash_done == 0)
+        // TODO: full_in pulse is coupled with nounce, in order to implement this layer of detection it needs a refactor
+          next_state = CALCULATE;
+        // else
+          // next_state = START_CAL;
       end
       CALCULATE : begin
         if(hash_done) // hash calculate is done
@@ -699,8 +765,8 @@ always @(*) begin
       OUTPUT_DONE : begin
         case (seq_type)
           8'h1 : begin
-            if(seq >= 3) 
-              next_state = SEQUENCE_DONE;            
+            if(seq >= 3)
+              next_state = SEQUENCE_DONE;
             else
               next_state = START_CAL;
           end
@@ -995,6 +1061,7 @@ always @(*) begin
         case (cbd_ctrl_cmd)
           8'h1 : seq_type = 1;
           8'h2 : seq_type = 2;
+          8'h3 : seq_type = 3;
         endcase
       end
       READY_INPUT : begin
@@ -1236,13 +1303,16 @@ module kyber_pke_enc_polyvec_fsm(
 
   output reg polyvec_s_readin_a,
   output reg polyvec_s_readin_b,
-  output reg polyvec_full_in_a,
-  output reg polyvec_full_in_b,
+  output reg polyvec_s_full_in_a,
+  output reg polyvec_s_full_in_b,
 
+  output wire [3:0] polyvec_a_s_type, // for managing which type of data [polyvec_a (?)] is accepting
   output reg counter_ctrl,
   input [7:0] counter,
+  output reg [3:0] seq,
 
   // BIG CONTROL
+  input [7:0]      input_ctrl_status,
   input [7:0]      ntt_ctrl_status,
   input [7:0]      invntt_ctrl_status,
   input [7:0]      matrix_hash_ctrl_status,
@@ -1262,8 +1332,18 @@ localparam OUTPUT        = 8;
 localparam OUTPUT_DONE   = 9;
 localparam SEQUENCE_DONE = 10;
 
+localparam CHOOSE          = 12;
+
+localparam MAT_STAGE           = 13;
+localparam MAT_INPUT_READY     = 14;
+localparam MAT_INPUT           = 15;
+localparam MAT_START_CAL_STAGE = 16;
+
 reg [7:0] curr_state;
 reg [7:0] next_state;
+reg [3:0] seq_type; // controlled by fsm command
+
+assign polyvec_a_s_type = seq_type;
 
 always @(posedge clk or posedge reset) begin
   if(reset) begin
@@ -1280,14 +1360,21 @@ always @(*) begin
   if(set) begin
     case(curr_state)
       IDLE : begin // TODO: for matrix A it needs a choosen stage like input
-        if(polyvec_readin_a_ok)
-          next_state = READY_INPUT;
+        if(polyvec_readin_a_ok & polyvec_readin_b_ok)
+          next_state = CHOOSE;
         else
           next_state = IDLE;
       end
+      CHOOSE : begin
+        case (polyvec_ctrl_cmd) // give it the command anyways
+          1 : next_state = READY_INPUT;
+          2 : next_state = MAT_STAGE;
+          default: next_state = CHOOSE;
+        endcase
+      end
       READY_INPUT : begin
         if(/*(ntt_ctrl_status  == 8'h4) & */
-           (polyvec_ctrl_cmd == 8'h1)  ) // NTT output ready
+           (input_ctrl_status == 8'h11)  ) // NTT output ready
           next_state = INPUT_0;
         else
           next_state = READY_INPUT;
@@ -1299,7 +1386,7 @@ always @(*) begin
           next_state = INPUT_0; 
       end
       INPUT_1 : begin
-        if(ntt_ctrl_status == 8'h10)
+        if(ntt_ctrl_status == 8'h10) // ntt output done
           next_state = INPUT_2;
         else
           next_state = INPUT_1;
@@ -1312,7 +1399,10 @@ always @(*) begin
           next_state = INPUT_2;
       end
       START_CAL : begin
-        next_state = CALCULATE;
+        if(polyvec_done == 0)
+          next_state = CALCULATE;
+        else
+          next_state = START_CAL;
       end
       CALCULATE : begin
         if(polyvec_done)
@@ -1334,10 +1424,45 @@ always @(*) begin
           next_state = OUTPUT;
       end
       OUTPUT_DONE : begin
-        next_state = OUTPUT_DONE;
+        case (seq_type)
+          1 : begin
+            next_state = SEQUENCE_DONE;
+          end
+          2 : begin
+            if(seq >= 3)
+              next_state = SEQUENCE_DONE;
+            else
+              next_state = MAT_STAGE;
+          end
+          default: next_state = OUTPUT_DONE;
+        endcase
       end
       SEQUENCE_DONE : begin
-        next_state = SEQUENCE_DONE;
+        if(polyvec_ctrl_cmd == 0)
+          next_state = IDLE;
+        else
+          next_state = SEQUENCE_DONE;
+      end
+      MAT_STAGE : begin
+        if(polyvec_readin_a_ok == 0)
+          next_state = MAT_INPUT_READY;
+        else
+          next_state = MAT_STAGE;
+      end
+      MAT_INPUT_READY : begin
+        if(matrix_hash_ctrl_status == 8'h4) // output ready
+          next_state = MAT_INPUT;
+        else
+          next_state = MAT_INPUT_READY;
+      end
+      MAT_INPUT : begin
+        if(matrix_hash_ctrl_status == 8'h11) // sequence stage (the input has been done 3 times)
+          next_state = MAT_START_CAL_STAGE;
+        else
+          next_state = MAT_INPUT;
+      end
+      MAT_START_CAL_STAGE : begin 
+        next_state = START_CAL;
       end
       default: begin
         $display("forbidden state");
@@ -1350,45 +1475,62 @@ end
 always @(*) begin
   if(reset) begin
     status(0);
-    polyvec_s_set      = 0;
-    polyvec_s_readout  = 0;
-    polyvec_s_cal_en   = 0;
-    polyvec_s_readin_a = 0;
-    polyvec_s_readin_b = 0;
-    polyvec_full_in_a  = 0;
-    polyvec_full_in_b  = 0;
-    counter_ctrl       = 0;
+    // type(0);
+    seq = 0;
+    seq_type = 0;
+    polyvec_s_set        = 0;
+    polyvec_s_readout    = 0;
+    polyvec_s_cal_en     = 0;
+    polyvec_s_readin_a   = 0;
+    polyvec_s_readin_b   = 0;
+    polyvec_s_full_in_a  = 0;
+    polyvec_s_full_in_b  = 0;
+    counter_ctrl         = 0;
     // reset flags here
   end
   else if(set) begin
     case(curr_state)
       IDLE : begin
         status(0);
+        // type(0);
+        seq = 0;
+        seq_type = 0;
         polyvec_s_set = 1;
         // flags go here
       end
+      CHOOSE : begin
+        case (polyvec_ctrl_cmd)
+          1 : seq_type = 1; 
+          2 : seq_type = 2;
+          default : seq_type = 0;
+        endcase
+      end
       READY_INPUT : begin
-        status(1);
-        polyvec_s_readin_b = 1; // full_in where??
-        polyvec_full_in_b  = 1;
+        // type(1);
       end
       INPUT_0 : begin
+        status(1);
         polyvec_s_readin_a = 1;
+        polyvec_s_readin_b  = 1; // full_in where??
+        polyvec_s_full_in_b = 1; // this is coupled with the external full_in signal
       end
       INPUT_1 : begin
         status(2);
       end
       INPUT_2 : begin
-        polyvec_full_in_a = 1;
+        polyvec_s_full_in_a = 1; // this waits on readin_a_ok, which is controlled by full_in 
       end
       START_CAL : begin
-        polyvec_full_in_a = 0;
-        polyvec_full_in_b = 0;
+        polyvec_s_full_in_a = 0;
+        polyvec_s_full_in_b = 0;
         polyvec_s_cal_en  = 1;
+        seq = seq + 1;
       end
       CALCULATE : begin
         status(3);
         polyvec_s_cal_en  = 0;
+        polyvec_s_readin_a = 0;
+        polyvec_s_readin_b = 0;
       end
       OUTPUT_READY : begin
         status(4);
@@ -1405,8 +1547,26 @@ always @(*) begin
       end
       SEQUENCE_DONE : begin
         status(8'h10);
-		  // polyvec_s_set = 0;
+        // type(0);
+        // polyvec_s_set = 0;
         // polyvec_full_in_a = 1;
+      end
+      MAT_STAGE : begin
+        polyvec_s_full_in_a = 1; // set polyvec a input to full in
+        polyvec_s_full_in_b = 0;
+        status(8'h13);
+      end
+      MAT_INPUT_READY : begin
+        status(8'h11);
+        // type(2);
+        polyvec_s_full_in_a = 0; // set polyvec b input to full in
+      end
+      MAT_INPUT : begin
+        status(8'h12);
+        polyvec_s_readin_b = 1;
+      end
+      MAT_START_CAL_STAGE : begin
+        polyvec_s_full_in_b = 1;
       end
     endcase
   end
@@ -1417,6 +1577,7 @@ begin
   polyvec_ctrl_status = st;
 end
 endtask
+
 endmodule
 
 
@@ -1436,8 +1597,11 @@ module kyber_pke_enc_invntt_fsm(
   output reg invntt_s_readout,
   output reg invntt_s_cal_en,
   output reg invntt_s_full_in,
+  output [3:0] invntt_s_seq,
 
   input [7:0] polyvec_ctrl_status,
+  input [7:0] accu1_ctrl_status, // i guess i can keep a sequence number to go with it?
+  input [3:0] accu1_seq, // indicate which "accumulator1" it is currently talking to, it is controlled by seq here
   input [7:0] accu2_ctrl_status,
   input [7:0] invntt_ctrl_cmd,
   output reg [7:0] invntt_ctrl_status
@@ -1453,9 +1617,14 @@ localparam OUTPUT_READY  = 6;
 localparam OUTPUT        = 7;
 localparam OUTPUT_DONE   = 8;
 localparam SEQUENCE_DONE = 9;
-
+localparam CHOOSE        = 11;
 reg [7:0] curr_state;
 reg [7:0] next_state;
+
+reg [3:0] seq_type;
+reg [3:0] seq; 
+
+assign invntt_s_seq = seq;
 
 always @(posedge clk or posedge reset) begin
   if(reset) begin
@@ -1472,16 +1641,33 @@ always @(*) begin
     case(curr_state)
       IDLE : begin
         if(invntt_readin_ok) // module init successfull
-          next_state = READY_INPUT;
+          next_state = CHOOSE;
         else
           next_state = IDLE;
       end
+      CHOOSE : begin
+        case (invntt_ctrl_cmd)
+          1 : next_state = READY_INPUT;
+          2 : next_state = READY_INPUT;
+          default: next_state = CHOOSE; 
+        endcase
+      end
       READY_INPUT : begin
-        if((polyvec_ctrl_status == 8'h4) &
-           (invntt_ctrl_cmd     == 8'h1)  )
-          next_state = INPUT;
-        else
-          next_state = READY_INPUT;
+        case (seq_type)
+          1 : begin
+            if(polyvec_ctrl_status == 8'h4)
+              next_state = INPUT;
+            else
+              next_state = READY_INPUT;
+          end
+          2 : begin
+            if(polyvec_ctrl_status == 8'h4)
+              next_state = INPUT;
+            else
+              next_state = READY_INPUT;
+          end
+          default: next_state = READY_INPUT; // TODO: this should go to error handler
+        endcase
       end
       INPUT : begin // status who and what? counter?
         if(polyvec_ctrl_status == 8'h6) // output done
@@ -1502,10 +1688,20 @@ always @(*) begin
           next_state = CALCULATE;
       end
       OUTPUT_READY : begin // spear it with the next module
-        if(accu2_ctrl_status == 7) // accu2 ready
-          next_state = OUTPUT;
-        else
-          next_state = OUTPUT_READY;
+        case (seq_type)
+          1 : begin
+            if(accu2_ctrl_status == 7) // accu2 ready
+              next_state = OUTPUT;
+            else
+              next_state = OUTPUT_READY;
+          end
+          2 : begin
+            // if(accu1_ctrl_status)
+            // else
+            next_state = OUTPUT_READY;
+          end
+          default: next_state = OUTPUT_READY; 
+        endcase
       end
       OUTPUT : begin
         if(invntt_readin_ok == 1) // output done
@@ -1514,13 +1710,25 @@ always @(*) begin
           next_state = OUTPUT;
       end
       OUTPUT_DONE : begin
-        // if(accu2_ctrl_status == 4) // e2 ready
-          next_state = SEQUENCE_DONE;
-        // else
-          // next_state = OUTPUT_DONE;
+        case (seq_type)
+          1 : begin
+            next_state = SEQUENCE_DONE;
+          end
+          2 : begin
+            // this goes to e1
+            if(seq >= 3)
+              next_state = SEQUENCE_DONE;
+            else
+              next_state = READY_INPUT;
+          end
+          default: next_state = OUTPUT_DONE; // TODO: this should goes to error handler (which does not exist yet) 
+        endcase
       end
       SEQUENCE_DONE : begin
-        next_state = SEQUENCE_DONE;
+        if(invntt_ctrl_cmd == 0)
+          next_state = IDLE;
+        else
+          next_state = SEQUENCE_DONE;
       end
       default: begin
         $display("forbidden state");
@@ -1546,6 +1754,14 @@ always @(*) begin
         // flags go here
         status(0);
         invntt_s_set = 1;
+        seq_type = 0;
+        seq = 0;
+      end
+      CHOOSE : begin
+        case (invntt_ctrl_cmd)
+          1 : seq_type = 1;
+          2 : seq_type = 2;
+        endcase
       end
       READY_INPUT : begin
         status(1);
@@ -1561,6 +1777,7 @@ always @(*) begin
       START_CAL_2 : begin
         invntt_s_cal_en  = 1;
         invntt_s_full_in = 0;
+        seq = seq + 1;
       end
       CALCULATE : begin
         status(3);
@@ -1721,6 +1938,112 @@ begin
   decomp_ctrl_status = st;
 end
 endtask
+
+endmodule
+
+// MEMORY 1 FSM 
+module kyber_pke_enc_accu1_fsm(
+  input clk,
+  input set,
+  input reset,
+
+  // INPUT -- from module
+  input [3:0] accu1_status_1, // note: I can see why SystemVerilog is more useful when designing complex system now...
+  input [3:0] accu1_status_2,
+  input [3:0] accu1_status_3,
+  
+  // OUTPUT -- to module
+  output reg [3:0] accu1_s_cmd, // used to determine what goes where in the main module
+  output reg accu1_s_readin,
+  output reg accu1_s_readout,
+  
+  // OUTPUT -- control assist
+  output reg [3:0] accu1_s_type, // this controls which module's data it accepts
+  output reg [3:0] accu1_s_seq, // this conrols which accu1_n is being controlled 
+
+  // INPUT -- from control
+  input [3:0] cbd_type,
+  input [7:0] cbd_counter,
+  input [3:0] invntt_s_seq,
+
+  // CONTROL CODES
+  input [7:0] cbd_ctrl_status,
+  input [7:0] invntt_ctrl_status,
+  input [7:0] accu1_ctrl_cmd,
+  output reg [7:0] accu1_ctrl_status
+);
+
+localparam IDLE       = 1;
+localparam STAGE_0    = 2;
+localparam INTT_READY = 3;
+localparam INTT_INPUT = 4;
+localparam STAGE_1    = 5; // the spaghetti continues...
+
+reg [7:0] curr_state;
+reg [7:0] next_state;
+always @(posedge clk or posedge reset) begin
+  if(reset) begin
+    curr_state <= IDLE;
+  end
+  else if (set) begin
+    curr_state <= next_state;
+  end
+end
+
+// MEMORY 1 NEXT STATE
+always @(*) begin
+  if(set) begin
+    case(curr_state)
+      IDLE : begin
+        if(accu1_ctrl_cmd == 1)
+          next_state = STAGE_0;
+        else
+          next_state = IDLE;
+      end
+      STAGE_0 : begin
+        if(accu1_ctrl_status == 1) // wait... is it possible to have one control 3? or should i make 1 fsm for each
+          next_state = INTT_READY; // it would probably be better to have one control 3, it scales better :P
+        else
+          next_state = STAGE_0;
+      end
+      INTT_READY : begin
+        next_state = INTT_READY;
+      end
+      INTT_INPUT : begin
+        next_state = INTT_INPUT;
+      end
+      STAGE_1 : begin
+        next_state = STAGE_1;
+      end
+      default: begin
+        $display("forbidden state");
+      end
+    endcase
+  end
+end
+
+// MEMORY 1 FLAG
+always @(posedge clk or posedge reset) begin
+  if(reset) begin
+    // reset flags here
+    status(0);
+  end
+  else if(set) begin
+    case(curr_state) 
+      IDLE : begin
+        // flags go here
+        status(0);
+      end
+    endcase
+  end
+end
+
+task status(input [7:0] st);
+begin
+  accu1_ctrl_status = st;
+end
+endtask
+
 
 endmodule
 
@@ -1975,6 +2298,7 @@ module kyber_pke_enc_matrix_hash_fsm(
 
   output reg counter_ctrl,
   input [7:0] counter,
+  output [3:0] matrix_hash_seq,
 
   // BIG CONTROL
   input [7:0] input_ctrl_status,
@@ -1993,6 +2317,9 @@ localparam OUTPUT        = 7;
 localparam OUTPUT_DONE   = 8;
 localparam SEQUENCE_DONE = 9;
 localparam CHOOSE        = 10;
+localparam START_CAL_STAGE = 11;
+localparam SEQUENCE_STAGE  = 12;
+
 
 reg [7:0] curr_state;
 reg [7:0] next_state;
@@ -2007,6 +2334,8 @@ end
 
 reg [3:0] seq; // internal sequence
 reg [3:0] seq_type;
+
+assign matrix_hash_seq = seq;
 
 // MATRIX HASH NEXT STATE
 always @(*) begin
@@ -2028,7 +2357,7 @@ always @(*) begin
           //   next_state = START_CAL;
           // end
           // 8'h3 : begin
-          //   next_state = START_CAL; // for error1
+          //   next_state = START_CAL;
           // end
           default: begin
             next_state = CHOOSE;
@@ -2048,7 +2377,13 @@ always @(*) begin
           next_state = INPUT;
       end
       START_CAL : begin
-        next_state = CALCULATE;
+        next_state = START_CAL_STAGE;
+      end
+      START_CAL_STAGE : begin
+        if(matrix_hash_done == 0) // wait until the done flag returns to 0
+          next_state = CALCULATE;
+        else
+          next_state = START_CAL_STAGE;
       end
       CALCULATE : begin
         if(matrix_hash_done) // hash calculate is done
@@ -2057,24 +2392,28 @@ always @(*) begin
           next_state = CALCULATE;
       end
       OUTPUT_READY : begin
-        // if(polyvec_ctrl_status == 0) // TODO
-          // next_state = OUTPUT;
-        // else
+        if(polyvec_ctrl_status == 8'h12) // ready input
+          next_state = OUTPUT;
+        else
           next_state = OUTPUT_READY;
       end
       OUTPUT : begin
-        // if(counter == 16)
-          // next_state = OUTPUT_DONE;
-        // else
+        if(counter == 128)
+          next_state = OUTPUT_DONE;
+        else
           next_state = OUTPUT;
       end
       OUTPUT_DONE : begin
-        case (matrix_hash_ctrl_cmd)
+        case (seq_type)
           8'h1 : begin // there is currently no other commands
-            if(seq >= 3) 
-              next_state = SEQUENCE_DONE;            
-            else
-              next_state = START_CAL;
+            // TODO: this needs to wait for polyvec 
+            // if(matrix_hash_done) begin 
+              // ideally this should be controlled by a separate counter :P
+              if(seq == 3 || seq == 6 || seq == 9) // it needs to be done for 9 times
+                next_state = SEQUENCE_STAGE;            
+              else
+                next_state = START_CAL;
+            // end
           end
           // 8'h2 : begin
           //   next_state = SEQUENCE_DONE;            
@@ -2083,6 +2422,17 @@ always @(*) begin
             next_state = OUTPUT_DONE;
           end 
         endcase
+      end
+      SEQUENCE_STAGE : begin
+        if(seq >= 9) begin
+          next_state = SEQUENCE_DONE;
+        end
+        else begin
+          if(polyvec_ctrl_status == 8'h13) // MAT_STAGE
+            next_state = START_CAL;
+          else
+            next_state = SEQUENCE_STAGE;
+        end
       end
       SEQUENCE_DONE : begin
         // waits for the command to return to 0
@@ -2119,6 +2469,15 @@ always @(*) begin
         matrix_hash_s_set = 1; // readin_ok flag is behind a set flag bruhhhh
         matrix_hash_s_full_in = 0;
         matrix_hash_s_readin = 0;
+        seq_type = 0;
+      end
+      CHOOSE : begin
+        case (matrix_hash_ctrl_cmd)
+          8'h1 : seq_type = 1;
+          // 8'h2 : seq_type = 2;
+          // 8'h3 : seq_type = 3;
+          default : seq_type = 0;
+        endcase
       end
       READY_INPUT : begin
         status(1);
@@ -2130,11 +2489,13 @@ always @(*) begin
       START_CAL : begin
         seq = seq + 1;
         matrix_hash_s_full_in = 1; // pulse high
+        matrix_hash_s_readin = 0;
+      end
+      START_CAL_STAGE : begin
+        matrix_hash_s_full_in = 0; // pulse low
       end
       CALCULATE : begin
-        matrix_hash_s_full_in = 0; // pulse low
         status(3);
-        matrix_hash_s_readin = 0;
       end
       OUTPUT_READY : begin
         status(4);
@@ -2148,6 +2509,9 @@ always @(*) begin
         status(6);
         matrix_hash_s_readout = 0;
         counter_ctrl = 0;
+      end
+      SEQUENCE_STAGE : begin
+        status(8'h11);
       end
       SEQUENCE_DONE : begin
         status(8'h10);

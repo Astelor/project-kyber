@@ -277,7 +277,7 @@ generate // TODO: global param for KYBER_K
     assign ram_b_din_2[i] = (inb_k == i) ? polyvec_din_b_2 : 0 ;
 
     assign ram_a_we[i] = (ina_k == i) & (~isload) & readin_a & readin_a_ok_r; // modify for top level readin
-    assign ram_b_we[i] = (inb_k == i) & (~isload) & readin_b & readin_a_ok_r;
+    assign ram_b_we[i] = (inb_k == i) & (~isload) & readin_b & readin_b_ok_r;
 
     // RAM C
     if(i < 2) begin : RAMC // RAM C is two no matter the KYBER_K
