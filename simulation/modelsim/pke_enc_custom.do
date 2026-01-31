@@ -161,11 +161,11 @@ add wave sim:tb_kyber_pke_enc/bruh/decomp_ctrl_status
 add wave sim:tb_kyber_pke_enc/bruh/decomp_fsm/curr_state
 add wave sim:tb_kyber_pke_enc/bruh/decomp_fsm/next_state
 
-#add wave -divider "MEM 1"
-#add wave sim:tb_kyber_pke_enc/bruh/accu1_ctrl_cmd
-#add wave sim:tb_kyber_pke_enc/bruh/accu1_ctrl_status
-#add wave sim:tb_kyber_pke_enc/bruh/accu1_fsm/curr_state
-#add wave sim:tb_kyber_pke_enc/bruh/accu1_fsm/next_state
+add wave -divider "MEM 1"
+add wave sim:tb_kyber_pke_enc/bruh/accu1_ctrl_cmd
+add wave sim:tb_kyber_pke_enc/bruh/accu1_ctrl_status
+add wave sim:tb_kyber_pke_enc/bruh/accu1_fsm/curr_state
+add wave sim:tb_kyber_pke_enc/bruh/accu1_fsm/next_state
 
 add wave -divider "MEM 2"
 add wave sim:tb_kyber_pke_enc/bruh/accu2_ctrl_cmd
@@ -183,7 +183,8 @@ add wave sim:tb_kyber_pke_enc/bruh/matrix_hash_fsm/next_state
 #== QUICK MODULE INNER WORKING VIEWER =======================
 add wave -height 30 -divider "MODULE INNARDS"
 
-#add wave sim:tb_kyber_pke_enc/bruh/hash/*
+add wave -divider "HASH"
+add wave sim:tb_kyber_pke_enc/bruh/hash/*
 
 #add wave -divider "DEC12"
 #add wave sim:tb_kyber_pke_enc/bruh/dec12/*
@@ -193,9 +194,13 @@ add wave sim:tb_kyber_pke_enc/bruh/polyvec/*
 #add wave sim:tb_kyber_pke_enc/bruh/decomp/*
 #add wave sim:tb_kyber_pke_enc/bruh/matrix_hash/* 
 
+add wave -height 30 -divider "MODULE INNARDS 1"
+add wave {sim:tb_kyber_pke_enc/bruh/GENACC[0]/accu1/*}
+add wave {sim:tb_kyber_pke_enc/bruh/GENACC[1]/accu1/*}
+add wave {sim:tb_kyber_pke_enc/bruh/GENACC[2]/accu1/*}
+
 add wave -height 30 -divider "MODULE INNARDS 2"
 add wave sim:tb_kyber_pke_enc/bruh/accu2/*
-
 
 #== RADIX ===================================================
 radix -unsigned
@@ -229,6 +234,11 @@ radix signal sim:tb_kyber_pke_enc/bruh/polyvec_din_a_2 "d"
 radix signal sim:tb_kyber_pke_enc/bruh/hash/hash_din "h"
 radix signal sim:tb_kyber_pke_enc/bruh/hash/hash_dout_1 "h"
 radix signal sim:tb_kyber_pke_enc/bruh/hash/hash_dout_2 "h"
+radix signal {sim:tb_kyber_pke_enc/bruh/hash/GENRAM[0]/ram_b/mem} "h" 
+radix signal {sim:tb_kyber_pke_enc/bruh/hash/GENRAM[1]/ram_b/mem} "h" 
+radix signal {sim:tb_kyber_pke_enc/bruh/hash/GENRAM[2]/ram_b/mem} "h" 
+radix signal {sim:tb_kyber_pke_enc/bruh/hash/GENRAM[3]/ram_b/mem} "h" 
+
 
 # -- CBD
 radix signal sim:tb_kyber_pke_enc/bruh/cbd/cbd_din_1 "h"
@@ -357,6 +367,23 @@ radix define DECOMP_States {
   -default hex
 }
 
+radix define MEM1_States {
+  8'd1 "IDLE",
+  
+  8'd10 "STAGE_2",
+  8'd7 "CBD_READY",
+  8'd8 "CBD_READY_1",
+  8'd9 "CBD_INPUT", -color blue
+  
+  8'd2 "STAGE_0",
+  8'd3 "INTT_READY",
+  8'd4 "INTT_INPUT",
+  8'd5 "STAGE_1",
+  8'd6 "SEQUENCE_DONE",
+  
+  8'hx "X",
+}
+
 radix define MEM2_States {
   8'd1  "IDLE",
   8'd9  "MESSAGE_STAGE",
@@ -434,6 +461,9 @@ radix signal sim:tb_kyber_pke_enc/bruh/decomp_fsm/next_state "DECOMP_States"
 
 radix signal sim:tb_kyber_pke_enc/bruh/matrix_hash_fsm/curr_state "MATRIX_States"
 radix signal sim:tb_kyber_pke_enc/bruh/matrix_hash_fsm/next_state "MATRIX_States"
+
+radix signal sim:tb_kyber_pke_enc/bruh/accu1_fsm/curr_state "MEM1_States"
+radix signal sim:tb_kyber_pke_enc/bruh/accu1_fsm/next_state "MEM1_States"
 
 radix signal sim:tb_kyber_pke_enc/bruh/accu2_fsm/curr_state "MEM2_States"
 radix signal sim:tb_kyber_pke_enc/bruh/accu2_fsm/next_state "MEM2_States"

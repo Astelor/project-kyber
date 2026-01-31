@@ -157,7 +157,7 @@ always @(*) begin
       end
       CBD_E2 : begin // (cbd command 2)
         if(cbd_ctrl_status == 8'h10) // cbd status = 8'h10 = sequence done
-          next_state = CBD_E1_STAGE;
+          next_state = HASH_CBD_1_STAGE;
         else
           next_state = CBD_E2;
       end
@@ -174,7 +174,10 @@ always @(*) begin
           next_state = HASH_CBD_1;
       end
       CBD_E1_STAGE : begin
-        next_state = CBD_E1;
+        // if(cbd_ctrl_status == 8'h0) // TODO: there's something wrong with the hash->cbd module when it's the first sequence, this is a band-aid
+          next_state = CBD_E1;
+        // else
+        //   next_state = CBD_E1_STAGE;
       end
       CBD_E1 : begin
         if(polyvec_ctrl_status == 8'h10) // sequence done
@@ -191,7 +194,7 @@ always @(*) begin
         else
           next_state = POLYVEC_MAT;
       end
-      INTT_2_STAGE : begin
+      INTT_2_STAGE : begin // for accu1
         next_state = INTT_2;
       end
       INTT_2 : begin
@@ -239,6 +242,7 @@ always @(*) begin
         ntt_cmd(1);
         polyvec_cmd(1);
         invntt_cmd(1);
+        accu1_cmd(1); // the accumulator_1 would be waiting anyway
 
       end
       // INPUT ==============
@@ -285,6 +289,7 @@ always @(*) begin
         hash_cmd(0);
       end
       HASH_CBD_1 : begin // for e2 (to be added with upscaled message)
+        // accu1_cmd(1);
         hash_cmd(3);
       end
       CBD_E1_STAGE : begin
@@ -681,6 +686,7 @@ localparam OUTPUT_DONE   = 8;
 localparam SEQUENCE_DONE = 9;
 
 localparam CHOOSE        = 10;
+localparam STAGE_0       = 11;
 
 reg [7:0] curr_state;
 reg [7:0] next_state;
@@ -740,10 +746,16 @@ always @(*) begin
       START_CAL : begin
         // if(hash_done == 0)
         // TODO: full_in pulse is coupled with nounce, in order to implement this layer of detection it needs a refactor
-          next_state = CALCULATE;
+          next_state = STAGE_0;
         // else
           // next_state = START_CAL;
       end
+      STAGE_0 : begin // wait for hash_done to return to 0
+        if(hash_done == 0)
+          next_state = CALCULATE;
+        else
+          next_state = STAGE_0;
+      end 
       CALCULATE : begin
         if(hash_done) // hash calculate is done
           next_state = OUTPUT_READY;
@@ -849,8 +861,10 @@ always @(*) begin
         seq = seq + 1;
         hash_s_full_in = 1; // pulse high
       end
-      CALCULATE : begin
+      STAGE_0 : begin
         hash_s_full_in = 0; // pulse low
+      end
+      CALCULATE : begin
         status(3);
         hash_s_readin = 0;
       end
@@ -902,11 +916,13 @@ module kyber_pke_enc_cbd_fsm(
   output reg counter_ctrl,
   input [7:0] counter, // 0~255
   output reg cbd_s_cal_pulse,
-  output [3:0] cbd_type, // 1 goes to ntt, 2 goes to memory 
+  output [3:0] cbd_s_type, // 1 goes to ntt, 2 goes to memory 
+  output [3:0] cbd_s_seq,
 
   // BIG CONTROL
   input [7:0] ntt_ctrl_status,
   input [7:0] hash_ctrl_status,
+  input [7:0] accu1_ctrl_status,
   input [7:0] accu2_ctrl_status,
   input [7:0] cbd_ctrl_cmd,
   output reg [7:0] cbd_ctrl_status
@@ -930,7 +946,8 @@ reg [7:0] next_state;
 reg [3:0] seq; // internal sequence
 reg [3:0] seq_type;
 
-assign cbd_type = seq_type;
+assign cbd_s_type = seq_type;
+assign cbd_s_seq = seq;
 
 always @(posedge clk or posedge reset) begin
   if (reset) begin
@@ -995,7 +1012,10 @@ always @(*) begin
               next_state = OUTPUT_READY;
           end
           8'h3 : begin // e1
-            next_state = OUTPUT_READY;
+            if(accu1_ctrl_status == 5) // E1 ready
+              next_state = OUTPUT;
+            else
+              next_state = OUTPUT_READY;
           end
         endcase
       end
@@ -1056,6 +1076,8 @@ always @(*) begin
       IDLE : begin
         status(0);
         cbd_s_set = 1;
+        seq_type = 0;
+        seq = 0;
       end
       CHOOSE : begin
         case (cbd_ctrl_cmd)
@@ -1095,7 +1117,6 @@ always @(*) begin
       end
       SEQUENCE_DONE : begin
         status(8'h10);
-        seq_type = 0;
       end
     endcase
   end
@@ -1597,11 +1618,12 @@ module kyber_pke_enc_invntt_fsm(
   output reg invntt_s_readout,
   output reg invntt_s_cal_en,
   output reg invntt_s_full_in,
+  output [3:0] invntt_s_type,
   output [3:0] invntt_s_seq,
 
   input [7:0] polyvec_ctrl_status,
   input [7:0] accu1_ctrl_status, // i guess i can keep a sequence number to go with it?
-  input [3:0] accu1_seq, // indicate which "accumulator1" it is currently talking to, it is controlled by seq here
+  // input [3:0] accu1_seq, // indicate which "accumulator1" it is currently talking to, it is controlled by seq here
   input [7:0] accu2_ctrl_status,
   input [7:0] invntt_ctrl_cmd,
   output reg [7:0] invntt_ctrl_status
@@ -1618,12 +1640,14 @@ localparam OUTPUT        = 7;
 localparam OUTPUT_DONE   = 8;
 localparam SEQUENCE_DONE = 9;
 localparam CHOOSE        = 11;
+
 reg [7:0] curr_state;
 reg [7:0] next_state;
 
 reg [3:0] seq_type;
 reg [3:0] seq; 
 
+assign invntt_s_type = seq_type; // for accu1 or accu2 choosing
 assign invntt_s_seq = seq;
 
 always @(posedge clk or posedge reset) begin
@@ -1696,9 +1720,10 @@ always @(*) begin
               next_state = OUTPUT_READY;
           end
           2 : begin
-            // if(accu1_ctrl_status)
-            // else
-            next_state = OUTPUT_READY;
+            if(accu1_ctrl_status == 1) // accu1 ready
+              next_state = OUTPUT;
+            else
+              next_state = OUTPUT_READY;
           end
           default: next_state = OUTPUT_READY; 
         endcase
@@ -1948,9 +1973,9 @@ module kyber_pke_enc_accu1_fsm(
   input reset,
 
   // INPUT -- from module
-  input [3:0] accu1_status_1, // note: I can see why SystemVerilog is more useful when designing complex system now...
-  input [3:0] accu1_status_2,
-  input [3:0] accu1_status_3,
+  input [3:0] accu1_status, // note: I can see why SystemVerilog is more useful when designing complex system now...
+  // input [3:0] accu1_status_2,
+  // input [3:0] accu1_status_3,
   
   // OUTPUT -- to module
   output reg [3:0] accu1_s_cmd, // used to determine what goes where in the main module
@@ -1962,8 +1987,10 @@ module kyber_pke_enc_accu1_fsm(
   output reg [3:0] accu1_s_seq, // this conrols which accu1_n is being controlled 
 
   // INPUT -- from control
-  input [3:0] cbd_type,
+  input [3:0] cbd_s_type,
+  input [3:0] cbd_s_seq,
   input [7:0] cbd_counter,
+  input [3:0] invntt_s_type,
   input [3:0] invntt_s_seq,
 
   // CONTROL CODES
@@ -1973,14 +2000,26 @@ module kyber_pke_enc_accu1_fsm(
   output reg [7:0] accu1_ctrl_status
 );
 
-localparam IDLE       = 1;
-localparam STAGE_0    = 2;
-localparam INTT_READY = 3;
-localparam INTT_INPUT = 4;
-localparam STAGE_1    = 5; // the spaghetti continues...
+localparam IDLE          = 1;
+
+localparam STAGE_2       = 10;
+localparam CBD_READY     = 7;
+localparam CBD_READY_1   = 8;
+localparam CBD_INPUT     = 9;
+
+localparam STAGE_3       = 11;
+
+localparam STAGE_0       = 2;
+localparam INTT_READY    = 3;
+localparam INTT_INPUT    = 4;
+localparam STAGE_1       = 5; // the spaghetti continues...
+localparam SEQUENCE_DONE = 6;
+
+// reg [3:0] seq;
 
 reg [7:0] curr_state;
 reg [7:0] next_state;
+
 always @(posedge clk or posedge reset) begin
   if(reset) begin
     curr_state <= IDLE;
@@ -1996,24 +2035,72 @@ always @(*) begin
     case(curr_state)
       IDLE : begin
         if(accu1_ctrl_cmd == 1)
-          next_state = STAGE_0;
+          next_state = STAGE_2;
         else
           next_state = IDLE;
       end
+      STAGE_2 : begin
+        if(cbd_s_type == 3      &&
+           cbd_ctrl_status == 4 &&
+           accu1_status == 1      )
+          next_state = CBD_READY;
+        else
+          next_state = STAGE_2;
+      end
+      CBD_READY : begin
+        if(cbd_ctrl_status == 5)
+          next_state = CBD_READY_1;
+        else
+          next_state  = CBD_READY;
+      end
+      CBD_READY_1 : begin
+        if(cbd_counter == 3)
+          next_state = CBD_INPUT;
+        else
+          next_state = CBD_READY_1;
+      end
+      CBD_INPUT : begin
+        if(cbd_counter == 131)
+          next_state = STAGE_3;
+        else
+          next_state = CBD_INPUT;
+      end
+      STAGE_3 : begin // this controls if the three sequence is done or not
+        if(cbd_s_seq < 3)
+          next_state = STAGE_2;
+        else if(cbd_ctrl_status == 8'h10)
+          next_state = STAGE_0;
+        else
+          next_state = STAGE_3;
+      end
       STAGE_0 : begin
-        if(accu1_ctrl_status == 1) // wait... is it possible to have one control 3? or should i make 1 fsm for each
+        if(accu1_status == 2 & invntt_s_type == 2) // wait... is it possible to have one control 3? or should i make 1 fsm for each
           next_state = INTT_READY; // it would probably be better to have one control 3, it scales better :P
         else
           next_state = STAGE_0;
       end
       INTT_READY : begin
-        next_state = INTT_READY;
+        if(invntt_ctrl_status == 5)
+          next_state = INTT_INPUT;
+        else
+          next_state = INTT_READY;
       end
       INTT_INPUT : begin
-        next_state = INTT_INPUT;
+        if(invntt_ctrl_status == 6) // output done
+          next_state = STAGE_1;
+        else
+          next_state = INTT_INPUT;
       end
       STAGE_1 : begin
-        next_state = STAGE_1;
+        if(invntt_s_seq < 3)
+          next_state = STAGE_0;
+        else if(invntt_ctrl_status == 8'h10) // sequence done
+          next_state = SEQUENCE_DONE;
+        else
+          next_state = STAGE_1;
+      end
+      SEQUENCE_DONE : begin
+        next_state = SEQUENCE_DONE;
       end
       default: begin
         $display("forbidden state");
@@ -2023,16 +2110,61 @@ always @(*) begin
 end
 
 // MEMORY 1 FLAG
-always @(posedge clk or posedge reset) begin
+always @(*) begin
   if(reset) begin
     // reset flags here
     status(0);
+    command(0);
+    type(0);
+    readin(0);
+    readout(0);
   end
   else if(set) begin
     case(curr_state) 
       IDLE : begin
         // flags go here
         status(0);
+        command(0);
+        type(0);
+        readin(0);
+        readout(0);
+      end
+      STAGE_2 : begin
+        command(1);
+        type(1);
+      end
+      CBD_READY : begin
+        status(5);
+      end
+      CBD_READY_1 : begin
+        
+      end
+      CBD_INPUT : begin
+        status(6);
+        readin(1);
+      end
+      STAGE_3 : begin
+        readin(0);
+      end
+      STAGE_0 : begin
+        command(2);
+        readin(0);
+        type(2);
+      end
+      INTT_READY : begin
+        status(1);
+      end
+      INTT_INPUT : begin
+        status(2);
+        readin(1);
+      end
+      STAGE_1 : begin
+        status(3);
+        type(0);
+        readin(0);
+      end
+      SEQUENCE_DONE : begin
+        status(4);
       end
     endcase
   end
@@ -2044,6 +2176,29 @@ begin
 end
 endtask
 
+task command(input [3:0] cmd);
+begin
+  accu1_s_cmd = cmd;
+end
+endtask
+
+task type(input [3:0] tp);
+begin
+  accu1_s_type = tp;
+end
+endtask
+
+task readin(input rd);
+begin
+  accu1_s_readin = rd;
+end
+endtask
+
+task readout(input rd);
+begin
+  accu1_s_readout = rd;
+end
+endtask
 
 endmodule
 
@@ -2060,7 +2215,7 @@ module kyber_pke_enc_accu2_fsm(
   output reg accu2_s_readout,
   output reg [3:0] accu2_s_type,
 
-  input [3:0] cbd_type,
+  input [3:0] cbd_s_type,
   input [7:0] cbd_counter,
 
   input [7:0] decomp_ctrl_status,
@@ -2069,7 +2224,6 @@ module kyber_pke_enc_accu2_fsm(
   input [7:0] accu2_ctrl_cmd,
   output reg [7:0] accu2_ctrl_status
 );
-
 
 localparam IDLE          = 1;
 localparam MESSAGE_STAGE = 9;
@@ -2126,8 +2280,8 @@ always @(*) begin
       end
       STAGE_0 : begin 
         // finished message input, waiting for CBD error2
-        // TODO: look for OUTPUT_READY and cbd_type
-        if(cbd_type == 2        && // e2 is the type we want  
+        // TODO: look for OUTPUT_READY and cbd_s_type
+        if(cbd_s_type == 2        && // e2 is the type we want  
            cbd_ctrl_status == 4 && // cbd output ready
            accu2_status == 2     ) // accu2_status ready 
           next_state = E2_READY;

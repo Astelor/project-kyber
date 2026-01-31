@@ -563,7 +563,8 @@ wire cbd_s_set;
 wire cbd_counter_ctrl;
 reg [7:0] cbd_counter;
 wire cbd_s_cal_pulse;
-wire [3:0] cbd_type;
+wire [3:0] cbd_s_type;
+wire [3:0] cbd_s_seq;
 
 kyber_pke_enc_cbd_fsm cbd_fsm(
   .clk(clk),
@@ -580,10 +581,13 @@ kyber_pke_enc_cbd_fsm cbd_fsm(
   .counter_ctrl    (cbd_counter_ctrl),
   .counter         (cbd_counter),
   .cbd_s_cal_pulse (cbd_s_cal_pulse),
-  .cbd_type        (cbd_type),
+  .cbd_s_type      (cbd_s_type),
+  .cbd_s_seq       (cbd_s_seq),
+
   // BIG CONTROL
   .hash_ctrl_status(hash_ctrl_status),
   .ntt_ctrl_status (ntt_ctrl_status),
+  .accu1_ctrl_status(accu1_ctrl_status),
   .accu2_ctrl_status(accu2_ctrl_status),
   .cbd_ctrl_cmd    (cbd_ctrl_cmd),
   .cbd_ctrl_status (cbd_ctrl_status)
@@ -675,6 +679,7 @@ wire invntt_s_readin;
 wire invntt_s_readout;
 wire invntt_s_cal_en;
 wire invntt_s_full_in;
+wire [3:0] invntt_s_type;
 wire [3:0] invntt_s_seq;
 
 kyber_pke_enc_invntt_fsm invntt_fsm(
@@ -691,9 +696,11 @@ kyber_pke_enc_invntt_fsm invntt_fsm(
   .invntt_s_readout   (invntt_s_readout),
   .invntt_s_cal_en    (invntt_s_cal_en),
   .invntt_s_full_in   (invntt_s_full_in),
-  .invntt_s_seq       (invntt_s_seq), // this should talk with the accu1_fsm
+  .invntt_s_type  (invntt_s_type), // this should talk with the accu1_fsm
+  .invntt_s_seq       (invntt_s_seq),
 
   .polyvec_ctrl_status(polyvec_ctrl_status),
+  .accu1_ctrl_status  (accu1_ctrl_status),
   .accu2_ctrl_status  (accu2_ctrl_status),
   .invntt_ctrl_cmd    (invntt_ctrl_cmd),
   .invntt_ctrl_status (invntt_ctrl_status)
@@ -762,9 +769,10 @@ kyber_pke_enc_matrix_hash_fsm matrix_hash_fsm(
 
 
 // MEM 1 CONTROL 
+reg  [3:0] accu1_status_r; 
 wire [3:0] accu1_s_cmd;
-wire accu1_s_readin;
-wire accu1_s_readout;
+wire       accu1_s_readin;
+wire       accu1_s_readout;
 wire [3:0] accu1_s_type;
 
 kyber_pke_enc_accu1_fsm accu1_fsm(
@@ -772,17 +780,17 @@ kyber_pke_enc_accu1_fsm accu1_fsm(
   .set(set),
   .reset(reset),
   
-  .accu1_status_1      (accu1_status [0]),
-  .accu1_status_2      (accu1_status [1]),
-  .accu1_status_3      (accu1_status [2]),
+  .accu1_status        (accu1_status_r),
 
   .accu1_s_cmd         (accu1_s_cmd),
   .accu1_s_readin      (accu1_s_readin),
   .accu1_s_readout     (accu1_s_readout),
   .accu1_s_type        (accu1_s_type),
 
-  .cbd_type            (cbd_type),
+  .cbd_s_type          (cbd_s_type),
+  .cbd_s_seq           (cbd_s_seq),
   .cbd_counter         (cbd_counter),
+  .invntt_s_type       (invntt_s_type),
   .invntt_s_seq        (invntt_s_seq),
 
   .cbd_ctrl_status     (cbd_ctrl_status),
@@ -809,7 +817,7 @@ kyber_pke_enc_accu2_fsm accu2_fsm(
   .accu2_s_readout     (accu2_s_readout),
   .accu2_s_type        (accu2_s_type),
 
-  .cbd_type            (cbd_type),
+  .cbd_s_type          (cbd_s_type),
   .cbd_counter         (cbd_counter),
 
   .decomp_ctrl_status  (decomp_ctrl_status),
@@ -823,6 +831,7 @@ kyber_pke_enc_accu2_fsm accu2_fsm(
 // LOCAL REG BEGIN ============================//
 reg readin_ok_r;
 reg [7:0] matrix_hash_nonce;
+reg full_in_r_1; // delayed by one cycle
 // LOCAL REG END ==============================//
 
 // ASSIGN BEGIN ===============================//
@@ -879,6 +888,17 @@ assign matrix_hash_set     = set & matrix_hash_s_set;
 assign matrix_hash_readin  = readin & matrix_hash_s_readin & readin_ok_r; 
 assign matrix_hash_readout = matrix_hash_s_readout;
 
+// -- ACCUMULATOR 1
+assign accu1_set[0]     = set;
+assign accu1_set[1]     = set;
+assign accu1_set[2]     = set;
+assign accu1_readout[0] = accu1_s_readout;
+assign accu1_readout[1] = accu1_s_readout;
+assign accu1_readout[2] = accu1_s_readout;
+assign accu1_cmd[0]     = accu1_s_cmd;
+assign accu1_cmd[1]     = accu1_s_cmd;
+assign accu1_cmd[2]     = accu1_s_cmd;
+
 // -- ACCUMULATOR 2
 assign accu2_set = set;
 assign accu2_cmd = accu2_s_cmd;
@@ -913,10 +933,10 @@ always @(*) begin
         // NOTE: POLYVEC A is from NTT
         polyvec_din_b_1   = dec12_dout_1; // decoded encryption key t -> polyvec ram b
         polyvec_din_b_2   = dec12_dout_2; // do it with an fsm because it sucks
-        polyvec_readin_b  = dec12_output_ok & polyvec_s_readin_b & readin_ok_r;
         polyvec_inb_k     = (dec12_out_index & 16'h180) >> 7;
         polyvec_inb_index = dec12_out_index << 1;
-        polyvec_full_in_b = full_in & polyvec_s_full_in_b;
+        polyvec_readin_b  = dec12_output_ok & polyvec_s_readin_b & readin_ok_r;
+        polyvec_full_in_b = full_in_r_1 & polyvec_s_full_in_b; // TODO: this misses the last data input to polyvec
     end
     3 : begin // message
       if (input_type == data_type) begin
@@ -965,35 +985,132 @@ always @(*) begin
 
     end
   endcase
-  case (cbd_type)
+  
+  case (cbd_s_type)
     1 : begin // CBD -> NTT
       ntt_readin   = cbd_readout & ntt_s_readin;
       ntt_din_1    = cbd_dout_2; // TODO: why the heck is the input swapped?
       ntt_din_2    = cbd_dout_1;
       ntt_in_index = (cbd_counter - 4) << 1; // is the power of 2 :)
     end
-    2 : begin // from cbd to memory 2 (error 2 + mu)
-      // controlled in accu2_s_type = 2
-    end
+    // 2 : begin // from cbd to memory 2 (error 2 + mu)
+    //   // controlled in accu2_s_type = 2
+    // end
     default : begin
       
     end
   endcase
   case (accu1_s_type) 
-    1 : begin
-      // case (accu1_s_seq)
-      //   // : 
-      //   // default: 
-      // endcase
-      // generate
-      //   for(i = 0; i < 3; i = i + 1) begin
+    1 : begin // cbd
+      case (cbd_s_seq)
+        1 : begin
+          accu1_status_r = accu1_status[0];
           
-      //   end
-      // endgenerate
-    end 
-    2 : begin
-      
+          accu1_readin[0] = accu1_s_readin;
+          accu1_addr_a[0] = (cbd_counter - 4) & 7'h7f;
+          accu1_addr_b[0] = (cbd_counter - 4) & 7'h7f;
+          accu1_data_a[0] = cbd_dout_1;
+          accu1_data_b[0] = cbd_dout_2;
+
+          // accu1_readin[1] = 0; accu1_readin[2] = 0;
+          // accu1_addr_a[1] = 0; accu1_addr_a[2] = 0;
+          // accu1_addr_b[1] = 0; accu1_addr_b[2] = 0;
+          // accu1_data_a[1] = 0; accu1_data_a[2] = 0;
+          // accu1_data_b[1] = 0; accu1_data_b[2] = 0;
+        
+        end
+        2 : begin
+          accu1_status_r = accu1_status[1];
+
+          accu1_readin[1] = accu1_s_readin;
+          accu1_addr_a[1] = (cbd_counter - 4) & 7'h7f;
+          accu1_addr_b[1] = (cbd_counter - 4) & 7'h7f;
+          accu1_data_a[1] = cbd_dout_1;
+          accu1_data_b[1] = cbd_dout_2;
+
+          // accu1_readin[0] = 0; accu1_readin[2] = 0;
+          // accu1_addr_a[0] = 0; accu1_addr_a[2] = 0;
+          // accu1_addr_b[0] = 0; accu1_addr_b[2] = 0;
+          // accu1_data_a[0] = 0; accu1_data_a[2] = 0;
+          // accu1_data_b[0] = 0; accu1_data_b[2] = 0;
+        
+        end
+        3 : begin
+          accu1_status_r = accu1_status[2];
+          
+          accu1_readin[2] = accu1_s_readin;
+          accu1_addr_a[2] = (cbd_counter - 4) & 7'h7f;
+          accu1_addr_b[2] = (cbd_counter - 4) & 7'h7f;
+          accu1_data_a[2] = cbd_dout_1;
+          accu1_data_b[2] = cbd_dout_2;
+
+          // accu1_readin[0] = 0; accu1_readin[1] = 0;
+          // accu1_addr_a[0] = 0; accu1_addr_a[1] = 0;
+          // accu1_addr_b[0] = 0; accu1_addr_b[1] = 0;
+          // accu1_data_a[0] = 0; accu1_data_a[1] = 0;
+          // accu1_data_b[0] = 0; accu1_data_b[1] = 0;
+        
+        end
+        default: begin
+          
+        end 
+      endcase
     end
+    2 : begin
+      case (invntt_s_seq) // TODO: make it good 
+        1 : begin
+          accu1_status_r = accu1_status[0];
+          
+          accu1_readin[0] = accu1_s_readin & invntt_valid_out;
+          accu1_addr_a[0] = invntt_out_index >> 1;
+          accu1_addr_b[0] = invntt_out_index >> 1;
+          accu1_data_a[0] = invntt_dout_1;
+          accu1_data_b[0] = invntt_dout_2;
+          
+          // accu1_readin[1] = 0; accu1_readin[2] = 0;
+          // accu1_addr_a[1] = 0; accu1_addr_a[2] = 0;
+          // accu1_addr_b[1] = 0; accu1_addr_b[2] = 0;
+          // accu1_data_a[1] = 0; accu1_data_a[2] = 0;
+          // accu1_data_b[1] = 0; accu1_data_b[2] = 0;
+
+        end 
+        2 : begin
+          accu1_status_r = accu1_status[1];
+
+          accu1_readin[1] = accu1_s_readin & invntt_valid_out;
+          accu1_addr_a[1] = invntt_out_index >> 1;
+          accu1_addr_b[1] = invntt_out_index >> 1;
+          accu1_data_a[1] = invntt_dout_1;
+          accu1_data_b[1] = invntt_dout_2;
+
+          // accu1_readin[0] = 0; accu1_readin[2] = 0;
+          // accu1_addr_a[0] = 0; accu1_addr_a[2] = 0;
+          // accu1_addr_b[0] = 0; accu1_addr_b[2] = 0;
+          // accu1_data_a[0] = 0; accu1_data_a[2] = 0;
+          // accu1_data_b[0] = 0; accu1_data_b[2] = 0;
+
+        end
+        3 : begin
+          accu1_status_r = accu1_status[2];
+
+          accu1_readin[2] = accu1_s_readin & invntt_valid_out;
+          accu1_addr_a[2] = invntt_out_index >> 1;
+          accu1_addr_b[2] = invntt_out_index >> 1;
+          accu1_data_a[2] = invntt_dout_1;
+          accu1_data_b[2] = invntt_dout_2;
+          
+          // accu1_readin[0] = 0; accu1_readin[1] = 0;
+          // accu1_addr_a[0] = 0; accu1_addr_a[1] = 0;
+          // accu1_addr_b[0] = 0; accu1_addr_b[1] = 0;
+          // accu1_data_a[0] = 0; accu1_data_a[1] = 0;
+          // accu1_data_b[0] = 0; accu1_data_b[1] = 0;
+          
+        end
+        default: begin
+          
+        end
+      endcase
+    end 
     default: begin
       
     end 
@@ -1072,6 +1189,10 @@ always @(posedge clk or posedge reset) begin
     else if(full_in)
       readin_ok_r <= 0;
   end
+end
+
+always @(posedge clk) begin
+  full_in_r_1 <= full_in;
 end
 
 always @(posedge clk or posedge reset) begin
