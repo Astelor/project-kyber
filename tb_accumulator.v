@@ -12,7 +12,7 @@ wire [ 6:0] addr_out;
 wire [15:0] data_a_out, data_b_out;
 wire [ 3:0] status;
 
-accumulator bruh(
+accumulator #(10) bruh(
   .clk(clk),
   .set(set),
   .reset(reset),
@@ -54,17 +54,21 @@ end
 
 reg [7:0] index = 0;
 parameter TEST_OFFSET = 0;
-
+parameter CONST = -3;
+reg [7:0] counter = 0;
 always @(posedge clk) begin
   if(cmd == 1 && status == 1) begin
     // command(1);
+    counter <= counter + 2;
     readin <= 1;
     index <= index + 1;
     addr_a <= index;
     addr_b <= index;
-    data_a <= mem[index] + 5; 
-                       //$random & 'hff;
-    data_b <= mem[index] + 7;
+    data_a <= //mem[index] + 5; 
+              //$random & 'hff;
+              counter*CONST;
+    data_b <= //mem[index] + 7;
+              (counter+1)*CONST;
   end
   if(cmd == 2 && status == 2 && flag == 1) begin
     // command(2);
@@ -78,7 +82,16 @@ always @(posedge clk) begin
   if(cmd == 0) begin
     index <= 0;
     readin <= 0;
-    command(2);
+    // command(2);
+  end
+  if(cmd == 3) begin
+    // if(readout)
+    //   readout <= 0;
+    // else
+      readout <= 1;
+  end
+  else begin
+    readout <= 0;
   end
   if(index == 128) begin
     if(cmd == 1)
