@@ -183,8 +183,8 @@ add wave sim:tb_kyber_pke_enc/bruh/matrix_hash_fsm/next_state
 #== QUICK MODULE INNER WORKING VIEWER =======================
 add wave -height 30 -divider "MODULE INNARDS"
 
-add wave -divider "HASH"
-add wave sim:tb_kyber_pke_enc/bruh/hash/*
+#add wave -divider "HASH"
+#add wave sim:tb_kyber_pke_enc/bruh/hash/*
 
 #add wave -divider "DEC12"
 #add wave sim:tb_kyber_pke_enc/bruh/dec12/*
@@ -375,12 +375,17 @@ radix define MEM1_States {
   8'd8 "CBD_READY_1",
   8'd9 "CBD_INPUT", -color blue
   
+  8'd11 "STAGE_3",
+
   8'd2 "STAGE_0",
   8'd3 "INTT_READY",
   8'd4 "INTT_INPUT",
   8'd5 "STAGE_1",
   8'd6 "SEQUENCE_DONE",
   
+  8'd12 "COMPRESS_START",
+  8'd13 "COMPRESS_DONE",
+
   8'hx "X",
 }
 
@@ -397,6 +402,9 @@ radix define MEM2_States {
   8'd10 "INTT_READY",
   8'd11 "INTT_INPUT",
   8'd12 "STAGE_2",
+  8'd13 "COMPRESS_START",
+  8'd14 "COMPRESS_DONE",
+  
   8'hx "X",
 }
 

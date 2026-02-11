@@ -166,7 +166,7 @@ always @(*) begin
         next_state = REDC_S0_1;
       end
       REDC_S0_1 : begin
-        if(counter == 1)
+        if(counter == 0)
           next_state = REDC_S0_2;
         else
           next_state = REDC_S0_1;
@@ -346,7 +346,7 @@ always @(posedge clk or posedge reset) begin
         barr_redc <= 1;
       end
       REDC_S0_2 : begin
-        ram_c_we_ok <= 1;
+        ram_c_we_ok <= 1; // the first item is not getting written
         
       end
       DOUT_S0 : begin

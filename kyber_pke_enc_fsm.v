@@ -2014,7 +2014,8 @@ localparam INTT_READY    = 3;
 localparam INTT_INPUT    = 4;
 localparam STAGE_1       = 5; // the spaghetti continues...
 localparam SEQUENCE_DONE = 6;
-
+localparam COMPRESS_START= 12;
+localparam COMPRESS_DONE = 13;
 // reg [3:0] seq;
 
 reg [7:0] curr_state;
@@ -2100,7 +2101,19 @@ always @(*) begin
           next_state = STAGE_1;
       end
       SEQUENCE_DONE : begin
-        next_state = SEQUENCE_DONE;
+        // if(accu1_status == 0)
+          next_state = COMPRESS_START;
+        // else
+          // next_state = SEQUENCE_DONE;
+      end
+      COMPRESS_START : begin
+        if(accu1_status == 5)
+          next_state = COMPRESS_DONE;
+        else
+          next_state = COMPRESS_START;
+      end
+      COMPRESS_DONE : begin
+        next_state = COMPRESS_DONE;
       end
       default: begin
         $display("forbidden state");
@@ -2145,6 +2158,7 @@ always @(*) begin
       end
       STAGE_3 : begin
         readin(0);
+        command(0);
       end
       STAGE_0 : begin
         command(2);
@@ -2165,6 +2179,15 @@ always @(*) begin
       end
       SEQUENCE_DONE : begin
         status(4);
+        command(0);
+      end
+      COMPRESS_START : begin
+        status(5);
+        command(4);
+      end
+      COMPRESS_DONE : begin
+        status(6);
+        command(0);
       end
     endcase
   end
@@ -2237,6 +2260,8 @@ localparam E2_READY_1    = 8;
 localparam INTT_READY    = 10;
 localparam INTT_INPUT    = 11;
 localparam STAGE_2       = 12;
+localparam COMPRESS_START= 13;
+localparam COMPRESS_DONE = 14;
 
 reg [7:0] curr_state;
 reg [7:0] next_state;
@@ -2325,7 +2350,20 @@ always @(*) begin
           next_state = INTT_INPUT;
       end
       STAGE_2 : begin
-        next_state = STAGE_2;
+        if(accu2_status == 0)
+          next_state = COMPRESS_START;
+        else
+          next_state = STAGE_2;
+      end
+      COMPRESS_START : begin
+        if(accu2_status == 5)
+          next_state = COMPRESS_DONE;
+        else
+        next_state = COMPRESS_START;
+      end
+      COMPRESS_DONE : begin
+        
+        next_state = COMPRESS_DONE;
       end
       // TODO: the next stage would to run it through compress and encode, turning it into ciphertext 2
       default: begin
@@ -2361,9 +2399,10 @@ always @(*) begin
         readin(1);
         type(1);
       end
+        // command(0);
       STAGE_0 : begin
-        status(3);
         command(2);
+        status(3);
         type(0);
         readin(0);
       end
@@ -2394,8 +2433,17 @@ always @(*) begin
       end
       STAGE_2 : begin
         status(9);
+        command(0);
         type(0);
         readin(0);
+      end
+      COMPRESS_START : begin
+        status(10);
+        command(4);
+      end
+      COMPRESS_DONE : begin
+        status(11);
+        command(5);
       end
     endcase
   end

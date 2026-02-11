@@ -102,7 +102,7 @@ always @(posedge clk) begin
         readin <= 1;
         index <= index + 1;
         in_index <= index;
-        din <= mem[index] + 5;
+        din <= mem[index] + 5; // message
       end
       if(index == (1 << 5) - 1 ) begin // TODO: this difference is kinda bad?
         full_in <= 1;

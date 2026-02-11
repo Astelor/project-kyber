@@ -16,14 +16,19 @@ module kyber_pke_enc(
     // 0: nothing, 
     // 1: randomness r, 
     // 2: (byte array encoded) public key t, 
-    // 3: public key matrix A, 
-    // 4: message m
+    // 3: message m
+    // 4: public key matrix A, 
     // or should I just port them all in in one go?
+  output [7:0]  kyber_dout,
+  output [15:0] kyber_out_index,
+  input  [3:0] output_type,
   output readin_ok, // big controll
   output done // controlled by FSM
 );
 
 parameter KYBER_K = 3;
+parameter DU = 10;
+parameter DV = 4;
 // MODULE INSTANCE BEGIN ======================//
 // HASH STUB ======
 // - INPUT
@@ -345,30 +350,6 @@ matrix_hash_stub matrix_hash(
   .done(matrix_hash_done)
 );
 
-
-// // RAM 1, vector
-// wire        ram1_we_1   [0:2], ram1_we_2   [0:2];
-// wire [7:0]  ram1_addr_1 [0:2], ram1_addr_2 [0:2];
-// wire [15:0] ram1_din_1  [0:2], ram1_din_2  [0:2];
-// wire [15:0] ram1_dout_1 [0:2], ram1_dout_2 [0:2];
-
-// genvar i;
-// generate
-//   for(i = 0; i < 3; i = i + 1) begin : GENRAM
-//     dual_ram #(8, 16) ram1(
-//       .clk(clk),
-//       .we_1  (ram1_we_1   [i]),
-//       .we_2  (ram1_we_2   [i]),
-//       .addr_1(ram1_addr_1 [i]),
-//       .addr_2(ram1_addr_2 [i]),
-//       .din_1 (ram1_din_1  [i]),
-//       .din_2 (ram1_din_2  [i]),
-//       .dout_1(ram1_dout_1 [i]),
-//       .dout_2(ram1_dout_2 [i])
-//     );
-//   end
-// endgenerate
-
 // MEMORY 1
 wire        accu1_set [0:2];
 wire [ 3:0] accu1_cmd [0:2];
@@ -382,7 +363,7 @@ wire [ 3:0] accu1_status [0:2];
 genvar i;
 generate
   for(i = 0; i < 3; i = i + 1) begin : GENACC
-    accumulator accu1(
+    accumulator #(DU) accu1(
       .clk(clk),
       .set(accu1_set [i]),
       .reset(reset),
@@ -414,7 +395,7 @@ wire [ 6:0] accu2_addr_out;
 wire [15:0] accu2_data_a_out, accu2_data_b_out;
 wire [ 3:0] accu2_status;
 
-accumulator accu2(
+accumulator #(DV) accu2(
   .clk(clk),
   .set(accu2_set),
   .reset(reset),
@@ -892,10 +873,10 @@ assign matrix_hash_readout = matrix_hash_s_readout;
 assign accu1_set[0]     = set;
 assign accu1_set[1]     = set;
 assign accu1_set[2]     = set;
-assign accu1_readout[0] = accu1_s_readout;
+assign accu1_readout[0] = accu1_s_readout; // no this is NOT fine 
 assign accu1_readout[1] = accu1_s_readout;
 assign accu1_readout[2] = accu1_s_readout;
-assign accu1_cmd[0]     = accu1_s_cmd;
+assign accu1_cmd[0]     = accu1_s_cmd; // this is also not fine >:(
 assign accu1_cmd[1]     = accu1_s_cmd;
 assign accu1_cmd[2]     = accu1_s_cmd;
 
@@ -915,7 +896,7 @@ always @(*) begin
       if (input_type == data_type) begin
         hash_full_in  = /*hash_s_full_in &*/ full_in;
         hash_din      = kyber_din;
-        hash_in_index = kyber_in_index;
+        hash_in_index = kyber_in_index; //& 8'hff;
       end
         polyvec_readin_b = 0;
         polyvec_full_in_b = 0; // TODO: there are too many special rule that combos with the fsm control signal?
@@ -1064,8 +1045,8 @@ always @(*) begin
           accu1_readin[0] = accu1_s_readin & invntt_valid_out;
           accu1_addr_a[0] = invntt_out_index >> 1;
           accu1_addr_b[0] = invntt_out_index >> 1;
-          accu1_data_a[0] = invntt_dout_1;
-          accu1_data_b[0] = invntt_dout_2;
+          accu1_data_a[0] = invntt_dout_2; // TODO: why the heck is it inverted
+          accu1_data_b[0] = invntt_dout_1;
           
           // accu1_readin[1] = 0; accu1_readin[2] = 0;
           // accu1_addr_a[1] = 0; accu1_addr_a[2] = 0;
@@ -1080,8 +1061,8 @@ always @(*) begin
           accu1_readin[1] = accu1_s_readin & invntt_valid_out;
           accu1_addr_a[1] = invntt_out_index >> 1;
           accu1_addr_b[1] = invntt_out_index >> 1;
-          accu1_data_a[1] = invntt_dout_1;
-          accu1_data_b[1] = invntt_dout_2;
+          accu1_data_a[1] = invntt_dout_2;
+          accu1_data_b[1] = invntt_dout_1;
 
           // accu1_readin[0] = 0; accu1_readin[2] = 0;
           // accu1_addr_a[0] = 0; accu1_addr_a[2] = 0;
@@ -1096,8 +1077,8 @@ always @(*) begin
           accu1_readin[2] = accu1_s_readin & invntt_valid_out;
           accu1_addr_a[2] = invntt_out_index >> 1;
           accu1_addr_b[2] = invntt_out_index >> 1;
-          accu1_data_a[2] = invntt_dout_1;
-          accu1_data_b[2] = invntt_dout_2;
+          accu1_data_a[2] = invntt_dout_2;
+          accu1_data_b[2] = invntt_dout_1;
           
           // accu1_readin[0] = 0; accu1_readin[1] = 0;
           // accu1_addr_a[0] = 0; accu1_addr_a[1] = 0;
@@ -1112,7 +1093,8 @@ always @(*) begin
       endcase
     end 
     default: begin
-      
+      // accu1_status = 0 is switched here...
+      accu1_status_r = accu1_status[0] & accu1_status[1] & accu1_status[2];
     end 
   endcase
   case (accu2_s_type) // memory type, determining what goes where 
@@ -1134,8 +1116,8 @@ always @(*) begin
       accu2_readin = accu2_s_readin & invntt_valid_out;
       accu2_addr_a = invntt_out_index >> 1;
       accu2_addr_b = invntt_out_index >> 1;
-      accu2_data_a = invntt_dout_1;
-      accu2_data_b = invntt_dout_2;
+      accu2_data_a = invntt_dout_2; // TODO: why the heck is it inverted?
+      accu2_data_b = invntt_dout_1;
     end
     default : begin
       accu2_readin = accu2_s_readin;
