@@ -35,6 +35,9 @@ module kyber_pke_enc_fsm(
 
   output reg [7:0] accu2_ctrl_cmd,
   input [7:0]      accu2_ctrl_status,
+
+  // output reg [7:0] output_ctrl_cmd,
+  // input [7:0]      output_ctrl_status,
   // OUTPUT =======
   // -- OUTSIDE
   output reg done // to outside
@@ -69,6 +72,8 @@ localparam POLYVEC_MAT       = 19; // matrix A
 
 localparam INTT_2_STAGE    = 20; 
 localparam INTT_2          = 21;
+
+localparam ACCU_DONE      = 22;
 
 reg [7:0] curr_state;
 reg [7:0] next_state;
@@ -198,7 +203,14 @@ always @(*) begin
         next_state = INTT_2;
       end
       INTT_2 : begin
-        next_state = INTT_2;
+        if(accu1_ctrl_status == 6 &
+           accu2_ctrl_status == 11)
+          next_state = ACCU_DONE;
+        else
+          next_state = INTT_2;
+      end
+      ACCU_DONE : begin
+        next_state = ACCU_DONE;
       end
       default:
         $display("forbidden state");
@@ -233,7 +245,7 @@ always @(*) begin
         accu1_cmd(0);
         accu2_cmd(0);
         matrix_hash_cmd(0);
-
+        done = 0;
       end
       HASH_CBD : begin
         input_cmd(1);
@@ -310,6 +322,11 @@ always @(*) begin
       INTT_2 : begin
         invntt_cmd(2);
       end
+      ACCU_DONE : begin
+        accu1_cmd(2); // output time :D
+        accu2_cmd(2);
+        done = 1;
+      end
     endcase
   end
 end
@@ -373,6 +390,12 @@ begin
   accu2_ctrl_cmd = cmd;
 end
 endtask
+
+// task output_cmd(input [7:0] cmd);
+// begin
+//   output_ctrl_cmd = cmd;
+// end
+// endtask
 
 endmodule
 
@@ -1983,8 +2006,8 @@ module kyber_pke_enc_accu1_fsm(
   output reg accu1_s_readout,
   
   // OUTPUT -- control assist
-  output reg [3:0] accu1_s_type, // this controls which module's data it accepts
-  output reg [3:0] accu1_s_seq, // this conrols which accu1_n is being controlled 
+  output reg  [3:0] accu1_s_type, // this controls which module's data it accepts
+  output wire [3:0] accu1_s_seq, // this conrols which accu1_n is being controlled 
 
   // INPUT -- from control
   input [3:0] cbd_s_type,
@@ -2016,10 +2039,18 @@ localparam STAGE_1       = 5; // the spaghetti continues...
 localparam SEQUENCE_DONE = 6;
 localparam COMPRESS_START= 12;
 localparam COMPRESS_DONE = 13;
-// reg [3:0] seq;
 
+localparam START_OUTPUT  = 14;
+localparam OUTPUT_READY  = 15;
+localparam OUTPUT        = 16;
+localparam OUTPUT_DONE   = 17;
+localparam ALL_DONE      = 18;
+
+reg [3:0] output_seq;
 reg [7:0] curr_state;
 reg [7:0] next_state;
+
+assign accu1_s_seq = output_seq;
 
 always @(posedge clk or posedge reset) begin
   if(reset) begin
@@ -2113,7 +2144,31 @@ always @(*) begin
           next_state = COMPRESS_START;
       end
       COMPRESS_DONE : begin
-        next_state = COMPRESS_DONE;
+        if(accu1_ctrl_cmd == 2)
+          next_state = START_OUTPUT;
+        else
+          next_state = COMPRESS_DONE;
+      end
+      START_OUTPUT : begin
+        next_state = OUTPUT;
+      end
+      // OUTPUT_READY : begin
+      //   next_state = OUTPUT;
+      // end
+      OUTPUT : begin
+        if(accu1_status == 6)  // accu output done
+          next_state = OUTPUT_DONE;
+        else
+          next_state = OUTPUT;
+      end
+      OUTPUT_DONE : begin
+        if(output_seq >= 3)
+          next_state = ALL_DONE;
+        else
+          next_state = START_OUTPUT;
+      end
+      ALL_DONE : begin
+        next_state = ALL_DONE;
       end
       default: begin
         $display("forbidden state");
@@ -2141,6 +2196,7 @@ always @(*) begin
         type(0);
         readin(0);
         readout(0);
+        output_seq = 0;
       end
       STAGE_2 : begin
         command(1);
@@ -2188,6 +2244,28 @@ always @(*) begin
       COMPRESS_DONE : begin
         status(6);
         command(0);
+      end
+      START_OUTPUT : begin
+        output_seq = output_seq + 1;
+      end
+      // OUTPUT_READY : begin
+      //   status(7);
+      // end
+      OUTPUT : begin
+        status(8);
+        command(3);
+        type(3);
+        readout(1);
+      end
+      OUTPUT_DONE : begin
+        status(9);
+        readout(0);
+      end
+      ALL_DONE : begin
+        type(0);
+        status(10);
+        command(0);
+        readout(0);
       end
     endcase
   end
@@ -2244,6 +2322,7 @@ module kyber_pke_enc_accu2_fsm(
   input [7:0] decomp_ctrl_status,
   input [7:0] cbd_ctrl_status,
   input [7:0] invntt_ctrl_status,
+  input [7:0] accu1_ctrl_status, // TODO: this could also be done on the big fsm, with more over head 
   input [7:0] accu2_ctrl_cmd,
   output reg [7:0] accu2_ctrl_status
 );
@@ -2262,6 +2341,10 @@ localparam INTT_INPUT    = 11;
 localparam STAGE_2       = 12;
 localparam COMPRESS_START= 13;
 localparam COMPRESS_DONE = 14;
+
+localparam OUTPUT_READY  = 15;
+localparam OUTPUT        = 16;
+localparam OUTPUT_DONE   = 17;
 
 reg [7:0] curr_state;
 reg [7:0] next_state;
@@ -2362,8 +2445,25 @@ always @(*) begin
         next_state = COMPRESS_START;
       end
       COMPRESS_DONE : begin
-        
-        next_state = COMPRESS_DONE;
+        if(accu2_ctrl_cmd == 2)
+          next_state = OUTPUT_READY;
+        else
+          next_state = COMPRESS_DONE;
+      end
+      OUTPUT_READY : begin
+        if(accu1_ctrl_status == 10)
+          next_state = OUTPUT;
+        else
+          next_state = OUTPUT_READY;
+      end
+      OUTPUT : begin
+        if(accu2_status == 6)
+          next_state = OUTPUT_DONE;
+        else
+          next_state = OUTPUT;
+      end
+      OUTPUT_DONE : begin
+        next_state = OUTPUT_DONE;
       end
       // TODO: the next stage would to run it through compress and encode, turning it into ciphertext 2
       default: begin
@@ -2443,7 +2543,21 @@ always @(*) begin
       end
       COMPRESS_DONE : begin
         status(11);
-        command(5);
+        command(0);
+      end
+      OUTPUT_READY : begin
+        status(12);
+        command(3);
+        type(4);
+      end
+      OUTPUT : begin
+        status(13);
+        readout(1);
+      end
+      OUTPUT_DONE : begin
+        status(14);
+        command(0);
+        readout(0);
       end
     endcase
   end
@@ -2735,3 +2849,75 @@ end
 endtask
 
 endmodule
+
+/*
+// OUTPUT FSM
+module kyber_pke_ enc_output_fsm (
+  input clk,
+  input set,
+  input reset,
+
+  // input full_in,
+  
+  output reg [3:0] output_type,
+
+  input [7:0] accu1_ctrl_status,
+  input [7:0] accu2_ctrl_status,
+  input [7:0] output_ctrl_cmd,
+  output reg [7:0] output_ctrl_status
+);
+
+localparam IDLE = 1;
+localparam ACCU1_0 = 2;
+// localparam ACCU2_0 = ;
+
+reg [7:0] curr_state;
+reg [7:0] next_state;
+always @(posedge clk or posedge reset) begin
+  if(reset) begin
+    curr_state <= IDLE;
+  end
+  else if (set) begin
+    curr_state <= next_state;
+  end
+end
+
+always @(*) begin
+  if(set) begin
+    case(curr_state)
+      IDLE : begin
+        next_state = IDLE;
+      end
+      default: begin
+        $display("forbidden state");
+      end
+    endcase
+  end
+end
+
+always @(posedge clk or posedge reset) begin
+  if(reset) begin
+    // reset flags here
+  end
+  else if(set) begin
+    case(curr_state) 
+      IDLE : begin
+        // flags go here
+      end
+    endcase
+  end
+end
+
+task status(input [7:0] st);
+begin
+  output_ctrl_status = st;
+end
+endtask
+
+task type(input [3:0] tp);
+begin
+  output_type = tp;
+end
+endtask
+
+endmodule  */

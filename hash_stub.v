@@ -207,6 +207,7 @@ always @(posedge clk or posedge reset) begin
       GENRAM[1].ram_b.load_mem(1);
       GENRAM[2].ram_b.load_mem(2);
       GENRAM[3].ram_b.load_mem(3);
+      $display("[%t] %s",$time, "hash_stub memory loading");
       $stop; // this is necessary to prevent the flag updating before the memory got read in
       // synthesis translate_on
     end

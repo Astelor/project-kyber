@@ -8,6 +8,7 @@ module kyber_pke_enc(
   input reset,
   input readin,
   input full_in,
+  input readout,
   input [7:0]  kyber_din,
   input [15:0] kyber_in_index,
   
@@ -19,9 +20,9 @@ module kyber_pke_enc(
     // 3: message m
     // 4: public key matrix A, 
     // or should I just port them all in in one go?
-  output [7:0]  kyber_dout,
-  output [15:0] kyber_out_index,
-  input  [3:0] output_type,
+  output reg [15:0]  kyber_dout_1, // do i make it into 8 bit?
+  output reg [15:0]  kyber_dout_2, // 
+  output reg [15:0] kyber_out_index,
   output readin_ok, // big controll
   output done // controlled by FSM
 );
@@ -354,7 +355,7 @@ matrix_hash_stub matrix_hash(
 wire        accu1_set [0:2];
 wire [ 3:0] accu1_cmd [0:2];
 reg         accu1_readin [0:2];
-wire        accu1_readout[0:2];
+reg         accu1_readout[0:2];
 reg  [ 6:0] accu1_addr_a [0:2], accu1_addr_b [0:2];
 reg  [15:0] accu1_data_a [0:2], accu1_data_b [0:2];
 wire [ 6:0] accu1_addr_out [0:2];
@@ -388,7 +389,7 @@ endgenerate
 wire        accu2_set;
 wire [ 3:0] accu2_cmd;
 reg         accu2_readin;
-wire        accu2_readout;
+reg        accu2_readout;
 reg  [ 6:0] accu2_addr_a, accu2_addr_b;
 reg  [15:0] accu2_data_a, accu2_data_b;
 wire [ 6:0] accu2_addr_out;
@@ -450,6 +451,9 @@ wire [7:0] accu1_ctrl_cmd;
 wire [7:0] accu2_ctrl_status;
 wire [7:0] accu2_ctrl_cmd;
 
+// wire [7:0] output_ctrl_status;
+// wire [7:0] output_ctrl_cmd;
+
 kyber_pke_enc_fsm fsm(
   .clk(clk),
   .set(set),
@@ -464,8 +468,9 @@ kyber_pke_enc_fsm fsm(
   .invntt_ctrl_status     (invntt_ctrl_status),
   .decomp_ctrl_status     (decomp_ctrl_status),
   .matrix_hash_ctrl_status(matrix_hash_ctrl_status),
-  // .accu1_ctrl_status       (accu1_ctrl_status),
-  .accu2_ctrl_status       (accu2_ctrl_status),
+  .accu1_ctrl_status      (accu1_ctrl_status),
+  .accu2_ctrl_status      (accu2_ctrl_status),
+  // .output_ctrl_status     (output_ctrl_status),
   // OUTPUT
   // -- INTERNAL
   .input_ctrl_cmd         (input_ctrl_cmd),
@@ -478,6 +483,7 @@ kyber_pke_enc_fsm fsm(
   .matrix_hash_ctrl_cmd   (matrix_hash_ctrl_cmd),
   .accu1_ctrl_cmd         (accu1_ctrl_cmd),
   .accu2_ctrl_cmd         (accu2_ctrl_cmd),
+  // .output_ctrl_cmd        (output_ctrl_cmd),
   // -- OUTSIDE
   .done(done)
 );
@@ -755,6 +761,7 @@ wire [3:0] accu1_s_cmd;
 wire       accu1_s_readin;
 wire       accu1_s_readout;
 wire [3:0] accu1_s_type;
+wire [3:0] accu1_s_seq;
 
 kyber_pke_enc_accu1_fsm accu1_fsm(
   .clk(clk),
@@ -766,7 +773,9 @@ kyber_pke_enc_accu1_fsm accu1_fsm(
   .accu1_s_cmd         (accu1_s_cmd),
   .accu1_s_readin      (accu1_s_readin),
   .accu1_s_readout     (accu1_s_readout),
+  
   .accu1_s_type        (accu1_s_type),
+  .accu1_s_seq         (accu1_s_seq),
 
   .cbd_s_type          (cbd_s_type),
   .cbd_s_seq           (cbd_s_seq),
@@ -804,9 +813,24 @@ kyber_pke_enc_accu2_fsm accu2_fsm(
   .decomp_ctrl_status  (decomp_ctrl_status),
   .cbd_ctrl_status     (cbd_ctrl_status),
   .invntt_ctrl_status  (invntt_ctrl_status),
+  .accu1_ctrl_status   (accu1_ctrl_status),
   .accu2_ctrl_cmd      (accu2_ctrl_cmd),
   .accu2_ctrl_status   (accu2_ctrl_status)
 );
+
+// wire [3:0] output_type;
+
+// kyber_pke_enc_output_fsm output_fsm(
+//   .clk(clk),
+//   .set(set),
+//   .reset(reset),
+//   .output_type(output_type),
+//   .accu1_ctrl_status(accu1_ctrl_status),
+//   .accu2_ctrl_status(accu2_ctrl_status),
+//   .output_ctrl_cmd(output_ctrl_cmd),
+//   .output_ctrl_status(output_ctrl_status)
+// );
+
 // FSM INSTANCE END ===========================//
 
 // LOCAL REG BEGIN ============================//
@@ -873,9 +897,9 @@ assign matrix_hash_readout = matrix_hash_s_readout;
 assign accu1_set[0]     = set;
 assign accu1_set[1]     = set;
 assign accu1_set[2]     = set;
-assign accu1_readout[0] = accu1_s_readout; // no this is NOT fine 
-assign accu1_readout[1] = accu1_s_readout;
-assign accu1_readout[2] = accu1_s_readout;
+// assign accu1_readout[0] = accu1_s_readout; // no this is NOT fine 
+// assign accu1_readout[1] = accu1_s_readout;
+// assign accu1_readout[2] = accu1_s_readout;
 assign accu1_cmd[0]     = accu1_s_cmd; // this is also not fine >:(
 assign accu1_cmd[1]     = accu1_s_cmd;
 assign accu1_cmd[2]     = accu1_s_cmd;
@@ -883,8 +907,7 @@ assign accu1_cmd[2]     = accu1_s_cmd;
 // -- ACCUMULATOR 2
 assign accu2_set = set;
 assign accu2_cmd = accu2_s_cmd;
-// assign accu2_readin = accu2_s_readin;
-assign accu2_readout = accu2_s_readout;
+// assign accu2_readout = accu2_s_readout;
 
 // ASSIGN END =================================//
 
@@ -981,7 +1004,12 @@ always @(*) begin
       
     end
   endcase
-  case (accu1_s_type) 
+  case (accu1_s_type)
+    0 : begin
+      // accu1_status = 0 is switched here...
+      // accu1_s_type = 0
+      accu1_status_r = accu1_status[0] & accu1_status[1] & accu1_status[2];
+    end
     1 : begin // cbd
       case (cbd_s_seq)
         1 : begin
@@ -1032,9 +1060,9 @@ always @(*) begin
           // accu1_data_b[0] = 0; accu1_data_b[1] = 0;
         
         end
-        default: begin
+        // default: begin
           
-        end 
+        // end 
       endcase
     end
     2 : begin
@@ -1087,15 +1115,33 @@ always @(*) begin
           // accu1_data_b[0] = 0; accu1_data_b[1] = 0;
           
         end
-        default: begin
+        // default: begin
           
-        end
+        // end
       endcase
     end 
-    default: begin
-      // accu1_status = 0 is switched here...
-      accu1_status_r = accu1_status[0] & accu1_status[1] & accu1_status[2];
-    end 
+    3 : begin // output
+      case (accu1_s_seq)
+        1 : begin
+          accu1_status_r = accu1_status[0];
+          accu1_readout[0] = readout & accu1_s_readout;
+          
+        end
+        2 : begin
+          accu1_status_r = accu1_status[1];
+          accu1_readout[1] = readout & accu1_s_readout;
+          
+        end
+        3 : begin
+          accu1_status_r = accu1_status[2];
+          accu1_readout[2] = readout & accu1_s_readout;
+          
+        end
+        default: begin
+          
+        end 
+      endcase
+    end
   endcase
   case (accu2_s_type) // memory type, determining what goes where 
     1 : begin  // decompressed (upcaled) message -> memory 2
@@ -1118,6 +1164,9 @@ always @(*) begin
       accu2_addr_b = invntt_out_index >> 1;
       accu2_data_a = invntt_dout_2; // TODO: why the heck is it inverted?
       accu2_data_b = invntt_dout_1;
+    end
+    4 : begin // output
+      accu2_readout = readout & accu2_s_readout;
     end
     default : begin
       accu2_readin = accu2_s_readin;
@@ -1153,6 +1202,37 @@ always @(*) begin
       polyvec_full_in_a = polyvec_s_full_in_a;
     end
   endcase
+
+  // output
+  if(accu1_s_type == 3) begin
+    case (accu1_s_seq)
+      1 : begin
+        kyber_dout_1    = accu1_data_a_out[0];
+        kyber_dout_2    = accu1_data_b_out[0];
+        kyber_out_index = accu1_addr_out[0] + 0;
+      end
+      2 : begin
+        kyber_dout_1    = accu1_data_a_out[1];
+        kyber_dout_2    = accu1_data_b_out[1];
+        kyber_out_index = accu1_addr_out[1] + 80;
+      end
+      3 : begin
+        kyber_dout_1    = accu1_data_a_out[2];
+        kyber_dout_2    = accu1_data_b_out[2];
+        kyber_out_index = accu1_addr_out[2] + 160;
+      end
+    endcase
+  end
+  else if(accu2_s_type == 4) begin
+    kyber_dout_1    = accu2_data_a_out;
+    kyber_dout_2    = accu2_data_b_out;
+    kyber_out_index = accu2_addr_out + 240;
+  end
+  else begin
+    kyber_dout_1    = 0;
+    kyber_dout_2    = 0;
+    kyber_out_index = 0;
+  end
   // TODO: this is specifically to comply with the specs
   matrix_hash_nonce1 = matrix_hash_nonce % KYBER_K;
   matrix_hash_nonce2 = matrix_hash_nonce / KYBER_K;

@@ -196,7 +196,7 @@ reg c1,c2;//,c3,c4;
 assign dout1 = buffer1;
 assign dout2 = buffer2;
 
-always @(posedge clk) begin
+always @(posedge clk or posedge reset) begin
   if(reset) begin
     c1 <= 0;
     // c2 <= 0;
@@ -297,7 +297,7 @@ reg c1,c2,c3;
 assign dout1 = buffer1;
 assign dout2 = buffer2;
 
-always @(posedge clk) begin
+always @(posedge clk or posedge reset) begin
   if(reset) begin
     c1 <= 0;
     // c2 <= 0;

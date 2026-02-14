@@ -108,6 +108,14 @@ add wave -divider "MEMORY 2"
 add wave -color gold sim:tb_kyber_pke_enc/bruh/accu2/ram_a/mem
 add wave -color gold sim:tb_kyber_pke_enc/bruh/accu2/ram_b/mem
 
+#== OTPUT CHECK =============================================
+
+add wave -divider "OUTPUT"
+add wave sim:tb_kyber_pke_enc/bruh/readout
+add wave sim:tb_kyber_pke_enc/bruh/kyber_out_index
+add wave sim:tb_kyber_pke_enc/bruh/kyber_dout_1
+add wave sim:tb_kyber_pke_enc/bruh/kyber_dout_2
+
 
 #== QUICK STATE CHECK =======================================
 # this is for the ease of checking because everything's so far away
@@ -205,6 +213,9 @@ add wave sim:tb_kyber_pke_enc/bruh/accu2/*
 #== RADIX ===================================================
 radix -unsigned
 # -- BRUHHHHHHHH
+
+radix signal sim:tb_kyber_pke_enc/bruh/kyber_dout_1 "h"
+radix signal sim:tb_kyber_pke_enc/bruh/kyber_dout_2 "h"
 
 radix signal sim:tb_kyber_pke_enc/bruh/kyber_din "h"
 
@@ -386,6 +397,12 @@ radix define MEM1_States {
   8'd12 "COMPRESS_START",
   8'd13 "COMPRESS_DONE",
 
+  8'd14 "START_OUTPUT",
+  8'd15 "OUTPUT_READY",
+  8'd16 "OUTPUT",
+  8'd17 "OUTPUT_DONE",
+  8'd18 "ALL_DONE",
+  
   8'hx "X",
 }
 
@@ -404,7 +421,9 @@ radix define MEM2_States {
   8'd12 "STAGE_2",
   8'd13 "COMPRESS_START",
   8'd14 "COMPRESS_DONE",
-  
+  8'd15 "OUTPUT_READY",
+  8'd16 "OUTPUT",
+  8'd17 "OUTPUT_DONE",
   8'hx "X",
 }
 

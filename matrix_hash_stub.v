@@ -201,6 +201,7 @@ always @(posedge clk or posedge reset) begin
     if(shake128_done) begin
       // synthesis translate_off
       ram_b.load_mem(4);
+      $display("[%t] %s",$time, "matrix_hash_stub memory loading");
       $stop; // this is necessary to prevent the flag updating before the memory got read in
       // synthesis translate_on
     end
