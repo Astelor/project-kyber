@@ -10,7 +10,7 @@ Running Jupyter notebook in **VScode**, you can setup your own thing if it works
 
 # How to use
 
-1. Find `save_mem.do` in `simulation/modelsim/`.
+1. Find `save_mem.do` in `quartus/simulation/modelsim/`.
 2. Find `checking.ipynb` in `jupyter`.
 3. Run the simulation until it reaches the memory result that you want to verify.
 4. Issue `do save_mem.do` in **ModelSim**.
@@ -23,6 +23,7 @@ Running Jupyter notebook in **VScode**, you can setup your own thing if it works
 ```
 📦jupyter
  ┣ 📜checking.ipynb 
+ ┣ 📜pke_keygen.ipynb
  ┣ 📜test.ipynb
  ┣ 📜encode.ipynb
  ┣ 📜compress.ipynb
