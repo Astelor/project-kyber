@@ -46,17 +46,22 @@ always begin
 end
 
 reg [15:0] c_mem [543:0]; // output: 80*2*3+32*2
-reg [7:0] mem [255:0]; // match kyber_din
+
+
+reg [7:0] rand [31:0]; // randomness
+reg [7:0] seed [31:0]; // p seed
 reg [7:0] ekt [(384*3)-1:0]; // for public key t
 reg [7:0] msg [31:0]; // secret message key
 // TODO: design a test data that compresses the 0~(256*3 - 1) to ekt
 // so that the end result to polyvec b port is ordered number
 // for testing
 initial begin
-  $readmemh("D:/!Github_coding/project-kyber/poly_test.hex", mem);
-  $readmemh("D:/!Github_coding/project-kyber/ekt_test.hex", ekt);
-  $readmemh("D:/!Github_coding/project-kyber/poly_test.hex", msg);
-  
+  $readmemh("D:/!Github_coding/project-kyber/test/sim_input/encryption_key.hex", ekt);
+  $readmemh("D:/!Github_coding/project-kyber/test/sim_input/r_randomness.hex", rand);
+  $readmemh("D:/!Github_coding/project-kyber/test/sim_input/message.hex", msg);
+  $readmemh("D:/!Github_coding/project-kyber/test/sim_input/p_seed.hex", seed);
+
+
   data_type <= 0;
   #15 reset <= 1;
   #5 reset <= 0;
@@ -81,7 +86,7 @@ always @(posedge clk) begin
         readin <= 1;
         index <= index + 1;
         in_index <= index;
-        din <= mem[index] + 2; 
+        din <= rand[index]; 
                     //$random & 'hff;
       end
       if(index == ( 1 << 5)) begin
@@ -115,7 +120,7 @@ always @(posedge clk) begin
         readin <= 1;
         index <= index + 1;
         in_index <= index;
-        din <= mem[index] + 5; // message
+        din <= msg[index];
       end
       if(index == (1 << 5) - 1 ) begin // TODO: this difference is kinda bad?
         full_in <= 1;
@@ -124,13 +129,13 @@ always @(posedge clk) begin
         full_in <= 0;
       end
     end
-    4 : begin
+    4 : begin // seed
       data_type <= 4;
       if(readin_ok /*& readin*/) begin
         readin <= 1;
         index <= index + 1;
         in_index <= index;
-        din <= mem[index] + 7;
+        din <= seed[index];
       end
       if(index == (1 << 5) - 1 ) begin // TODO: this difference is kinda bad?
         full_in <= 1;

@@ -18,7 +18,7 @@ module kyber_pke_enc(
     // 1: randomness r, 
     // 2: (byte array encoded) public key t, 
     // 3: message m
-    // 4: public key matrix A, 
+    // 4: seed for public key matrix A, 
     // or should I just port them all in in one go?
   output reg [15:0]  kyber_dout_1, // do i make it into 8 bit?
   output reg [15:0]  kyber_dout_2, // 

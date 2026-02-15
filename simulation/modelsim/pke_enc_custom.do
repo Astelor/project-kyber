@@ -242,6 +242,7 @@ radix signal sim:tb_kyber_pke_enc/bruh/polyvec_din_a_1 "d"
 radix signal sim:tb_kyber_pke_enc/bruh/polyvec_din_a_2 "d"
 
 # -- HASH
+radix signal sim:tb_kyber_pke_enc/bruh/hash/ram_a/mem "h"
 radix signal sim:tb_kyber_pke_enc/bruh/hash/hash_din "h"
 radix signal sim:tb_kyber_pke_enc/bruh/hash/hash_dout_1 "h"
 radix signal sim:tb_kyber_pke_enc/bruh/hash/hash_dout_2 "h"
