@@ -269,7 +269,7 @@ always @(*) begin
         // make it so that it only draw once?
         // so that it's not dependent on readout signal
         // if(readout)
-        if(counter >= 32)
+        if(counter >= 32) // the sequence ending, return to idle
           next_state = IDLE;
         else  
           next_state = OUTPUT_READY;

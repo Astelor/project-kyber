@@ -52,7 +52,7 @@ initial begin
   //$readmemh("D:/!Github_coding/project-kyber/test/test-invntt-in.hex", mem);
   // not randomized input data
   
-  $readmemh("D:/!Github_coding/project-kyber/poly_test.hex", mem);
+  $readmemh("D:/!Github_coding/project-kyber/quartus/poly_test.hex", mem);
   
   #15 reset <= 1;
   #5 reset <= 0;

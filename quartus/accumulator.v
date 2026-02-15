@@ -122,6 +122,7 @@ compress_encode #(DD) comp(
 wire [3:0] ctrl;
 wire ram_a_s_we, ram_b_s_we;
 wire [6:0] counter_s;
+wire [6:0] comp_counter_s;
 wire comp_readout_ok_s;
 wire comp_reset_s;
 accumulator_fsm #(DD) fsm(
@@ -133,6 +134,7 @@ accumulator_fsm #(DD) fsm(
   .readin(readin), // from outside
   .ctrl(ctrl),
   .counter(counter_s),
+  .comp_counter(comp_counter_s),
   .comp_readout_ok(comp_readout_ok_s),
   
   .ram_a_s_we(ram_a_s_we),
@@ -147,17 +149,17 @@ accumulator_fsm #(DD) fsm(
 // readin
 reg readin_t;
 reg readin_t_1;
-reg readin_t_2;
+// reg readin_t_2;
 // data
 reg [15:0] data_a_t;
 reg [15:0] data_b_t;
 // addr
 reg [ 6:0] addr_a_t;
 reg [ 6:0] addr_b_t;
-// counter
+// counter, it's only used for output
 reg [ 6:0] counter;
 reg [ 6:0] counter_t_1;
-reg [ 6:0] counter_t_2;
+// reg [ 6:0] counter_t_2;
 
 // ram regs
 reg ram_a_we_2_r;
@@ -175,15 +177,91 @@ assign ram_b_we_2 = ram_b_we_2_r; //ram_b_s_we & readin_t_1;
 assign ram_a_we_1 = 0;
 assign ram_b_we_1 = 0;
 
+assign counter_s = counter;
+
 assign comp_readin = comp_readin_r;
-assign counter_s = comp_counter;
+assign comp_counter_s = comp_counter;
 assign comp_readout_ok_s = comp_readout_ok;
 assign comp_reset = reset | comp_reset_s ;
 // ASSGIN END ===================================
 
 always @(*) begin
   if(set) begin
-    case (ctrl)
+    // ADDER
+    if(readin_t & ctrl == 1 | ctrl == 2) begin
+      adder_a_addr   = addr_a_t;
+      adder_b_addr   = addr_b_t;
+      adder_a_data_1 = data_a_t;
+      adder_b_data_1 = data_b_t;
+    end
+    else begin
+      adder_a_addr   = 0;
+      adder_b_addr   = 0;
+      adder_a_data_1 = 0;
+      adder_b_data_1 = 0;
+    end
+
+    if(ctrl == 2 & readin_t) begin
+      adder_a_data_2 = ram_a_dout_1;
+      adder_b_data_2 = ram_b_dout_1;
+    end
+    else begin
+      adder_a_data_2 = 0;
+      adder_b_data_2 = 0;
+    end
+    // RAM
+    if(readin & ctrl == 2) begin
+      ram_a_addr_1   = addr_a;
+      ram_b_addr_1   = addr_b;
+    end
+    else if(ctrl == 3 | ctrl == 4) begin
+      ram_a_addr_1 = counter;
+      ram_b_addr_1 = counter;
+    end
+    else begin
+      ram_a_addr_1 = 0;
+      ram_b_addr_1 = 0;
+    end
+
+    if(readin_t_1 & ctrl == 1 | ctrl == 2) begin
+      ram_a_addr_2   = adder_a_addr_out;
+      ram_b_addr_2   = adder_b_addr_out;
+      ram_a_din_2    = adder_a_data_out;
+      ram_b_din_2    = adder_b_data_out;
+    end
+    else if(ctrl == 4) begin
+      ram_a_addr_2 = comp_counter;
+      ram_b_addr_2 = comp_counter;
+      ram_a_din_2 = comp_dout1;
+      ram_b_din_2 = comp_dout2;
+    end
+    else begin
+      ram_a_addr_2 = 0;
+      ram_b_addr_2 = 0;
+      ram_a_din_2 = 0;
+      ram_b_din_2 = 0;
+    end
+    // COMPRESS
+    if(ctrl == 4) begin
+      comp_din1 = ram_a_dout_1;
+      comp_din2 = ram_b_dout_1;
+    end
+    else begin
+      comp_din1 = 0;
+      comp_din2 = 0;
+    end
+    // OUTPUT
+    if(ctrl == 3) begin
+      data_a_out   = ram_a_dout_1;
+      data_b_out   = ram_b_dout_1;
+      addr_out     = counter_t_1;
+    end
+    // else begin
+    //   data_a_out = 0;
+    //   data_b_out = 0;
+    //   addr_out = 0;
+    // end
+    /* case (ctrl)
       // 0 : begin
         
       // end
@@ -250,7 +328,7 @@ always @(*) begin
         adder_a_data_1 = 0;
         adder_b_data_1 = 0;
       end
-    endcase
+    endcase */
   end
 end
 
@@ -268,7 +346,7 @@ always @(posedge clk or posedge reset) begin
       3 : begin
         // output memory
         if(readout) begin
-          counter <= counter + 7'd1;
+            counter <= counter + 7'd1;
         end
       end
       4 : begin
@@ -286,7 +364,7 @@ always @(posedge clk or posedge comp_reset) begin
   end
   else if(set) begin
     if(ctrl == 4 & comp_readout_ok == 1) begin
-      comp_counter <= comp_counter + 1;
+      comp_counter <= comp_counter + 7'd1;
     end
   end
 end
@@ -307,13 +385,17 @@ end
 
 always @(*) begin
   if(set) begin
-    if(ctrl == 1 || ctrl == 2 || ctrl == 3 )begin
+    if(ctrl == 1 | ctrl == 2 | ctrl == 3 )begin
       ram_a_we_2_r = ram_a_s_we & readin_t_1;
       ram_b_we_2_r = ram_b_s_we & readin_t_1;
     end
     else if (ctrl == 4) begin
       ram_a_we_2_r = ram_a_s_we & comp_readout_ok;
       ram_b_we_2_r = ram_b_s_we & comp_readout_ok;
+    end
+    else begin
+      ram_a_we_2_r = 0;
+      ram_b_we_2_r = 0;
     end
   end
 end
@@ -323,7 +405,7 @@ always @(posedge clk) begin
   // readin
   readin_t    <= readin;
   readin_t_1  <= readin_t;
-  readin_t_2  <= readin_t_1;
+  // readin_t_2  <= readin_t_1;
   // data
   data_a_t    <= data_a;
   data_b_t    <= data_b;
@@ -332,7 +414,7 @@ always @(posedge clk) begin
   addr_b_t    <= addr_b;
   // counter
   counter_t_1 <= counter;
-  counter_t_2 <= counter_t_1;
+  // counter_t_2 <= counter_t_1;
 end
 
 endmodule
@@ -372,6 +454,7 @@ module accumulator_fsm #(parameter DD = 4) (
   input [3:0] cmd,
   input       readin,
   input [6:0] counter,
+  input [6:0] comp_counter,
   input comp_readout_ok,
 
   output reg [3:0] ctrl,
@@ -397,6 +480,7 @@ localparam MODE_2 = 3;
 localparam MODE_3 = 4;
 localparam MODE_4 = 5;
 localparam COMP_DONE = 6;
+localparam OUTPUT_DONE = 7;
 
 reg [7:0] curr_state;
 reg [7:0] next_state;
@@ -440,11 +524,19 @@ always @(*) begin
       MODE_3 : begin
         if(cmd != 3)
           next_state = IDLE;
+        else if(counter >= (DD*8-1))
+          next_state = OUTPUT_DONE;
         else
           next_state = MODE_3;
       end
+      OUTPUT_DONE : begin
+        if(cmd != 3)
+          next_state = IDLE;
+        else
+          next_state = OUTPUT_DONE;
+      end
       MODE_4 : begin
-        if(counter == DELAY) //79 -> DD = 10. 32 -> DD = 4
+        if(comp_counter == DELAY) //79 -> DD = 10. 32 -> DD = 4
           next_state = COMP_DONE;
         else
           next_state = MODE_4;
@@ -498,6 +590,10 @@ always @(posedge clk or posedge reset) begin
       MODE_3 : begin
         status_task(3);
         ctrl_task(3);
+      end
+      OUTPUT_DONE : begin
+        status_task(6);
+        ctrl_task(0);
       end
       // MODE 4
       MODE_4 : begin

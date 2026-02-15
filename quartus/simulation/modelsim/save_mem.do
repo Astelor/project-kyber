@@ -27,3 +27,5 @@ mem save -wordsperline 1 -outfile /!Github_coding/project-kyber/test/sim_output/
 
 mem save -wordsperline 1 -outfile /!Github_coding/project-kyber/test/sim_output/tb_kyber_pke_enc-accu2-ram_a.txt sim:/tb_kyber_pke_enc/bruh/accu2/ram_a/mem
 mem save -wordsperline 1 -outfile /!Github_coding/project-kyber/test/sim_output/tb_kyber_pke_enc-accu2-ram_b.txt sim:/tb_kyber_pke_enc/bruh/accu2/ram_b/mem 
+
+mem save -wordsperline 1 -outfile /!Github_coding/project-kyber/test/sim_output/tb_kyber_pke_enc-c_mem.txt sim:/tb_kyber_pke_enc/c_mem

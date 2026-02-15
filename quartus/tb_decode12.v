@@ -31,7 +31,7 @@ end
 reg [7:0] ekt [(1152-1):0];
 
 initial begin
-  $readmemh("D:/!Github_coding/project-kyber/ekt_test.hex", ekt);
+  $readmemh("D:/!Github_coding/project-kyber/quartus/ekt_test.hex", ekt);
   #15 reset <= 1;
   #5 reset <= 0;
   set <= 1;

@@ -35,7 +35,7 @@ always begin
 end
 
 initial begin
-  $readmemh("D:/!Github_coding/project-kyber/poly_test.hex", mem);
+  $readmemh("D:/!Github_coding/project-kyber/quartus/poly_test.hex", mem);
   #10 reset <= 1;
   #5 reset <= 0;
   #5 set <= 1;

@@ -227,7 +227,7 @@ always @(posedge clk or posedge reset) begin
   end
   else if(set) begin
     if(readin) begin
-      counter <= counter + 1;
+      counter <= counter + 2'd1;
       buf1 <= din2;
       buf2 <= din1;
 
@@ -322,7 +322,7 @@ always @(posedge clk or posedge reset) begin
   end
   else if(set) begin
     if(readin) begin
-      counter <= counter + 1;
+      counter <= counter + 2'd1;
       buf1 <= din2;
       buf2 <= din1;
 

@@ -40,7 +40,7 @@ reg [3:0] why = 0;
 reg flag;
 
 initial begin
-  $readmemh("D:/!Github_coding/project-kyber/poly_test.hex", mem);
+  $readmemh("D:/!Github_coding/project-kyber/quartus/poly_test.hex", mem);
   #15 reset <= 1;
   #5 reset <= 0;
   #5 set <= 1;
@@ -54,7 +54,7 @@ end
 
 reg [7:0] index = 0;
 parameter TEST_OFFSET = 0;
-parameter CONST = -3;
+parameter CONST = 3; // 3, 49
 reg [7:0] counter = 0;
 always @(posedge clk) begin
   if(cmd == 1 && status == 1) begin

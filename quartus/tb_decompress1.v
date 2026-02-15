@@ -47,7 +47,7 @@ reg [7:0] msg [31:0]; // secret message key
 reg flag = 0;
 
 initial begin
-  $readmemh("D:/!Github_coding/project-kyber/poly_test.hex", msg);
+  $readmemh("D:/!Github_coding/project-kyber/quartus/poly_test.hex", msg);
   #15 reset <= 1;
   #5 reset <= 0;
   #5 set <= 1;

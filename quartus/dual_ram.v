@@ -14,7 +14,7 @@ module dual_ram #(parameter DEPTH = 8, WIDTH = 16)(
 reg [WIDTH-1:0] mem [ (1<<DEPTH)-1 :0];
 
 initial begin // TODO this should be gone once the RAM input and output finish construction
-  //$readmemh("D:/!Github_coding/project-kyber/poly_test.hex", mem);
+  //$readmemh("D:/!Github_coding/project-kyber/quartus/poly_test.hex", mem);
 end
 
 // PORT 1

@@ -7,7 +7,7 @@ module zeta_rom #(parameter invntt = 0)(
 reg signed [15:0] zetas [127:0];
 
 initial begin
-  $readmemh("D:/!Github_coding/project-kyber/zeta.hex", zetas);
+  $readmemh("D:/!Github_coding/project-kyber/quartus/zeta.hex", zetas);
   if(invntt) begin
     zetas[1] = 1397;
   end
