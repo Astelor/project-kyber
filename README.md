@@ -8,13 +8,14 @@ Goal: Implement fully synthesizable IND-CPA Kyber PKE encryption specified in FI
 
 ![QUARTUS](Screenshot%202026-02-14%20231853.png)
 
+- [Paper/report of senior undergraduate project](kyber.pdf)
 - [Information about hash modules](/sim_hash_stub/README.md)
 - [Information about data verification](/test/jupyter/README.md)
 - [Random information about the implementation (WIP)](yapping.md)
 
 # Method
 
-Based on [FIPS 203](https://nvlpubs.nist.gov/nistpubs/fips/nist.fips.203.pdf) and the C implementation by [PQ-CRYSTALS team](https://github.com/pq-crystals/kyber), and wrote Verilog and Python code according to the C implementation. While the individual sub-functions' algorithms are mapped directly from the C implementation, there is no distinct or established protocol when it comes to the sub-function interconnect/sequence design. As how the sub-function modules "talk" with each other is designed as the author (Astelor) deems appropriate.
+Based on [FIPS 203](https://nvlpubs.nist.gov/nistpubs/fips/nist.fips.203.pdf) and the C implementation by [PQ-CRYSTALS team](https://github.com/pq-crystals/kyber), and wrote Verilog and Python code according to the C implementation. This is very much a learning project, as the computation flow is implemented with many FSM and wires. See my [report](kyber.pdf) for more info.
 
 # File Tree
 
